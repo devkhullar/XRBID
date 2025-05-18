@@ -298,9 +298,13 @@ def SubtractBKG(data, sigma=3.0):
     
 ###-----------------------------------------------------------------------------------------------------
 
-def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, sharphi=1, roundlo=-1, roundhi=1, savereg=False):
+def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, sharphi=1, roundlo=-1, roundhi=1, savereg=False, plot=False, cmap='gray_r', vmin=0, vmax=0.3, aperture_color='#0547f9'):
     
-    """ Using DaoFind from photutils, generates a list of objects
+    """ Using DaoFind from photutils, generates a list of objects. 
+	
+	Also if `plots=True`, will plot the image with apertures around the point sources. This should be used for testing
+	purposes only to confirm if your threshold or fwhm are suffiecient enought to detect all the point sources in 
+	the image. 
 
     PARAMETERS
     ----------
@@ -314,7 +318,10 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     roundlo		[float] (-1)	: Lower limit for object roundness read in by DAOStarFinder.
     roundhi		[float)	(1) 	: Upper limit for object roundness read in by DAOStarFinder. 
     savefile 		[str] (False)	: If sources should be saved to a region file, input should be the name of the region file to be saved.
-    
+    plot        [bool] (False)  : Plots the image with apertures around the detected sources found through the DAOfind algorithm. 
+	cmap        [str] ('gray_s) : Color map used for the plot.
+	vmin, vmax  [float] (0, 0.3): The data range that the colormap covers.
+	aperture_color [string]('#0547f9')  : The color of the apertures
 
     RETURN
     ----------
@@ -339,6 +346,16 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     if savereg:
     	WriteReg(sources=[objects['xcentroid'].tolist(), objects['ycentroid'].tolist()], \
     		 radius=3, coordsys="image", outfile=savereg, label=objects["id"].tolist())
+	
+    # To plot apertures on top of sources to check if the code is identifying the sources properly.
+    positions = np.transpose((objects["xcentroid"], objects["ycentroid"]))
+	
+    if plot:
+        apertures = CircularAperture(positions, r=5)
+        plt.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, origin='lower')
+        apertures.plot(color=aperture_color)
+        plt.show() 
+		
 
     return objects
     
