@@ -37,12 +37,30 @@ file_dir = os.path.dirname(os.path.abspath(__file__))
 # These files should be downloaded and the path to the file should be added to the file name. 
 # ACS/WFC: https://www.stsci.edu/hst/instrumentation/acs/data-analysis/aperture-corrections
 # WFC3/UVIS: https://www.stsci.edu/hst/instrumentation/wfc3/data-analysis/photometric-calibration/uvis-encircled-energy
+# JWST NIRCam: https://jwst-docs.stsci.edu/jwst-near-infrared-camera/nircam-performance/nircam-point-spread-functions#NIRCamPointSpreadFunctions-Encircledenergy
 ACS_EEFs = pd.read_csv(file_dir+"/ACS_WFC_EEFs.txt")          # Using new EEFs for ACS as of 7/19/23
 WFC3_EEFs = pd.read_csv(file_dir+"/WFC3_UVIS1_EEFs.frame")    # Using new EEFs for WFC3 as of 7/19/23
+short_EEFs = pd.read_csv(file_dir+"/Encircled_Energy_SW_ETCv.csv") # EEFs for the short wavelength filter
+long_EEFs = pd.read_csv(file_dir+"/Encircled_Energy_SW_ETCv.csv")  # EEFs for the long wavelength filter
 
 # WFC3 zeropoints from: https://www.stsci.edu/files/live/sites/www/files/home/hst/instrumentation/wfc3/documentation/instrument-science-reports-isrs/_documents/2021/WFC3_ISR_2021-04.pdf
 WFC3_UVIS1_zpt = pd.read_csv(file_dir+"/WFC3_UVIS1_zeropoints.txt")
 WFC3_UVIS2_zpt = pd.read_csv(file_dir+"/WFC3_UVIS2_zeropoints.txt")
+
+# Filters for JWST NIRCam 
+long_filter = ["F070W", "F090W", "F115W", "F140M",
+                    "F150W2", "F150W", "F162M", "F164N",
+                    "F182M", "F187N", "F200W", "F210M",
+                    "F212N", "F250M", "F277W", "F300M",
+                    "F322W2", "F323N", "F335M", "F356W",
+                    "F360M", "F405N", "F410M", "F430M",
+                    "F444W", "F460M", "F466N", "F470N"
+                    "F480M"]
+
+short_filter = ["F070W", "F090W", "F115W", "F140M",
+                "F150W2", "F150W", "F162M", "F164N",
+                "F182M", "F187N", "F200W", "F210M",
+                "F212N"]
 
 ###-----------------------------------------------------------------------------------------------------
 
@@ -63,12 +81,13 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
 
     PARAMETERS
     ----------
-    hdu 		[FITS]	: 	The fits image of the HST field
+    hdu 		[FITS]	: 	The fits image of the HST/JWST field
     gal  		[str]	: 	Name of the galaxy of interest
-    instrument 		[str]	: 	Name of the instrument (ACS or WFC3)
+    instrument 		[str]	: 	Name of the instrument (ACS, WFC3, or NIRCAM)
     filter 		[str]	: 	Name of the hdu filter
     fwhm_arcs 		[float]	: 	FWHM of stars in the hdu image
-    pixtoarcs   	[float] :   	Pixel to arcsecond conversion. Defaults to 0.05 for ACS and 0.03962 for WFC3.
+    pixtoarcs   	[float] :   	Pixel to arcsecond conversion. Defaults to 0.05 for ACS, 0.03962 for WFC3;
+	                                 0.031 for short wavelength and 0.063 for long wavelength filters for JWST NIRCam.
     zeropoint 		[float]	: 	Vega zeropoint magnitude, for converting photometry into Vega magnitudes. 
     				        Defaults to obtaining with Zeropoint() if none is given.
     EEF 		[float]	: 	The Encircled Energy Fraction at the maximum aperture pixel 
@@ -132,14 +151,27 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     # The WFC3 EEF is going to slightly underestimate the correction, because there is no 20 pix correction
     if not EEF: 
         if instrument.lower() == 'acs': EEF = ACS_EEFs[ACS_EEFs['Filter']==filter.upper()].reset_index()['20'][0]
-        else: EEF = WFC3_EEFs[WFC3_EEFs['Filter']==filter.upper()].reset_index()['20.75'][0]
-        
+        elif instrument.lower() == 'wfc3': EEF = WFC3_EEFs[WFC3_EEFs['Filter']==filter.upper()].reset_index()['20.75'][0]
+        elif instrument.lower() == 'nircam':
+			# Note that in the code below, long_EEFs is being used for the short wavelength filter as well. 
+			# This is because long_EEFs also contain the EEF information on the short wavelength filters.
+			# Also note that both the wavelengths use different conversion rates (check documentation above)
+			if filter in short_filter:
+				EEF = long_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel rads 
+            if filter in long_filter:
+			    EEF = long_EEFs.at[19, filter] # 1.60'' as the default, approximating the 20 pixel rads
+			
+		
     # Setting up the pixel scale, if not given 
     if not pixtoarcs: 
         try: pixtoarcs = hdu['PRIMARY'].header['D001SCAL'] # Pull directly from header, if available
         except: 
             if instrument.lower() == 'acs': pixtoarcs = 0.05
-            else: pixtoarcs = 0.03962
+            elif instrument.lower() == 'wfc3': pixtoarcs = 0.03962
+			elif instrument.lower() == 'nircam':
+                if filter in long_filter: pixtoarcs = 0.063 
+                if filter in short_filter: pixtoarcs = 0.031
+
         
     # Identifying point sources with DaoFind
     print("Running DaoFind. This may take a while...")
@@ -175,42 +207,35 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     data_sub = SubtractBKG(data)
 
     positions = np.transpose((objects['xcentroid'], objects['ycentroid']))
+	# Create apertures for aperture corrections
     ap_rads = [i for i in range(1,31)]
-    apertures_full = [CircularAperture(positions, r=r) for r in ap_rads]
-    apertures_source = CircularAperture(positions, r=min_rad) # 3px aperture photometry used for sources by default
-    apertures_extended = CircularAperture(positions, r=extended_rad) # aperture photometry for clusters (default is 10 pixels)
-
+    apertures_full, apertures_source, apertures_extended = create_apertures(objects, ap_rads, min_rad, extended_rad)
+	
     print("Photometry...")
-    # Generate aperture photometry with the background-subtracted data
+	 # Generate aperture photometry with the background-subtracted data
+	
+	# Collects the photometry over the full range of the apertures needed for the aperture correction step
     starttime = time.time()
-    # Collects the photometry over the full range of the apertures needed for the aperture correction step
-    phot_full = aperture_photometry(data_sub, apertures_full,method="center")
-    endtime = time.time()
-
-    phot_full.write("photometry_"+gal+"_"+filter.lower()+"_"+instrument.lower()+"_full"+suffix+".ecsv", overwrite=True)
-    print("photometry_"+gal+"_"+filter.lower()+"_"+instrument.lower()+"_full"+suffix+".ecsv", "saved")
-
-    print("Time for full photometry:", (endtime-starttime)/60., "minutes")
-
-    starttime = time.time()
-
+    phot_full = perform_photometry(data_sub, data, hdu, apertures_full, instrument, filter, type='full', gal, calc_error=False)
+	endtime = time.time()
+	print("Time for full photometry:", (endtime-starttime)/60., "minutes")
+	
     ### Errors are estimated using exposure time as the effective gain and the ###
     ### background-only image as the background noise			       ###
     
     # Collects the photometry that will be used as the 'true' photometry for the source, 
     # collected within an aperture of radius min_rad
-    phot_sources = aperture_photometry(data_sub, apertures_source, error=calc_total_error(data, \
-    				       data-data_sub, effective_gain=hdu[0].header["EXPTIME"]))
-    endtime = time.time()
+	starttime = time.time()
+    phot_sources = perform_photometry(data_sub, data, hdu, apertures_source, instrument, filter, type='source', gal, calc_error=True)
+	endtime = time.time()
     print("Time for source photometry:", (endtime-starttime)/60., "minutes")
 
-    starttime = time.time()
     # Collects the photometry that will be used as the photometry for clusters, 
     # collected within an aperture of radius extended_rad
-    phot_extended = aperture_photometry(data_sub, apertures_extended, error=calc_total_error(data, \
-    				       data-data_sub, effective_gain=hdu[0].header["EXPTIME"]))
-    endtime = time.time()
-    print("Time for extended photometry:", (endtime-starttime)/60., "minutes")
+    starttime = time.time()
+    phot_extended = perform_photometry(data_sub, data, hdu, apertures_extended, instrument, filter, type='extended', gal, calc_error=True)
+	endtime = time.time()
+	print("Time for extended photometry:", (endtime-starttime)/60., "minutes")
 
     # If aperture corrections need to be calculated, run CorrectAp()
     if aperture_correction:
@@ -319,13 +344,15 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     roundhi		[float)	(1) 	: Upper limit for object roundness read in by DAOStarFinder. 
     savefile 		[str] (False)	: If sources should be saved to a region file, input should be the name of the region file to be saved.
     plot        [bool] (False)  : Plots the image with apertures around the detected sources found through the DAOfind algorithm. 
-	cmap        [str] ('gray_s) : Color map used for the plot.
-	vmin, vmax  [float] (0, 0.3): The data range that the colormap covers.
-	aperture_color [string]('#0547f9')  : The color of the apertures
+    cmap        [str] ('gray_s) : Color map used for the plot.
+    vmin, vmax  [float] (0, 0.3): The data range that the colormap covers.
+    aperture_color [string]('#0547f9')  : The color of the apertures
 
     RETURN
     ----------
     objects 	[QTable]	: A table of objects identified by DaoFind. 
+	
+    `AxesImage`             : If `plot=True`, will return the plot with apertures around the detected objects.
 
     """
 
@@ -542,3 +569,74 @@ def RemoveExt(Ebv, wave, mag):
     return mag_ext
     
 ###-----------------------------------------------------------------------------------------------------
+
+def perform_photometry(data_sub, data, hdu, apertures, instrument, filter, type, gal, suffix="", calc_error=True, savefile=True):
+    '''
+    A helper function to calculate the aperture photometry.
+	
+	PARAMETERS
+	----------
+	data_sub  [nd.array] : Background subtracted data
+	data      [nd.array] : Data extracted from the fits file. NOT BACKGROUND SUBTRACTED
+	hdu 		[FITS]	: 	The fits image of the HST/JWST field
+	apertures      [int] : the aperture size passed for performing the aperture photometry.
+	instrument 		[str]	: 	Name of the instrument (ACS, WFC3, or NIRCAM).
+	filter 		[str]	: 	Name of the hdu filter.
+	type           [str] : the type of photometry being performed -- full, extended or source.
+	gal  		[str]	: 	Name of the galaxy of interest.
+	suffix      [str]   : suffix to be added to the name of the saved file.
+	calc_error  [bool] (True) : Calculate the error for aperture photometry.
+	savefile    [bool] (True) : Save the file.
+
+    RETURNS
+	-------
+	photometry   [array] : The photometric information of the sources. 
+	
+	OTHER PRODUCTS
+	--------------
+    Region file for all daofind sources in the field in fk5 coordinates.
+        photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_full[SUFFIX].ecsv: 
+    Datafile containing the full 1-30 pixel aperture photometry of all sources in the field
+        photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_sources[SUFFIX].ecsv: 
+    Datafile containing the 3 pixel aperture photometry of all sources in the field
+        photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_extended[SUFFIX].ecsv: 
+    Datafile containing the extended pixel aperture photometry of all sources in the field
+    '''
+    hst_instrument = ['acs', 'wfc3']
+    if calc_error:  # If error needs to be calculated (this is mainly for extended and source photometry)
+        # If hst instrument
+        if instrument in hst_instrument: 
+            photometry = aperture_photometry(data_sub, apertures, error=calc_total_error(data, \
+                            data-data_sub, effective_gain=hdu[0].header["EXPTIME"]))
+            
+        else: # If jwst instrument
+                photometry = aperture_photometry(data_sub, apertures, error=calc_total_error(data, \
+                            data-data_sub, effective_gain=hdu[1].header["XPOSURE"]))
+                
+    else: # if you dont need to calculate error
+            photometry = aperture_photometry(data_sub, apertures, method='center')
+            
+    if savefile:
+        photometry.write("photometry_"+gal+"_"+filter.lower()+"_"+instrument.lower()+"_"+type+suffix+".ecsv", overwrite=True)
+        print("photometry_"+gal+"_"+filter.lower()+"_"+instrument.lower()+"_"+type+suffix+".ecsv", "saved")
+         
+    return photometry
+
+###------------------------------------------------------------------------------------------------
+def create_apertures(positions, rad_list, min_rad=3, extended_rad=10):
+    ''' 
+    A helper function to create apertures for doing the photometry.
+    
+    PARAMETERS
+    ----------
+    positions [nd.array] : Positions of the point sources detected through the DAOFind algorithm.
+    rad_list  [list] : A list of aperture radii to be used for the photometry.
+    min_rad [float] (3) : Minimum radius to be used.
+    max_rad [float] (10) : Maximum radius to be used for extended sources
+                          (in this case, clusters)
+    '''
+    apertures_full = [CircularAperture(positions, r=r) for r in rad_list]
+    apertures_source = CircularAperture(positions, r=min_rad) # 3px aperture photometry used for sources by default
+    apertures_extended = CircularAperture(positions, r=extended_rad) # aperture photometry for clusters (default is 10 pixels)
+    return apertures_full, apertures_source, apertures_extended
+###---------------------------------------------------------------------------------------------------
