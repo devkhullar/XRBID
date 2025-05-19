@@ -376,7 +376,6 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     # To plot apertures on top of sources to check if the code is identifying the sources properly.
     if plot:
         positions = np.transpose((objects["xcentroid"], objects["ycentroid"]))
-        positions = np.transpose((objects["xcentroid"], objects["ycentroid"]))
         apertures = CircularAperture(positions, r=5)
         plt.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, origin='lower')
         apertures.plot(color=aperture_color)
