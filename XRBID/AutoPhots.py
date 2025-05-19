@@ -481,6 +481,7 @@ def CorrectAp(tab, radii, gal, filter, EEF=False, num_stars=20, return_err=True,
     plt.ylim(26,10)
     plt.savefig(f"radial_profile_{gal}_{filter}.png")
     plt.show()
+    print(f"Saving radial_profile_{gal}_{filter}.png")
 
     ans = input("Check all profiles and enter 'y' to continue calculation: ")
     if "y" in ans:
