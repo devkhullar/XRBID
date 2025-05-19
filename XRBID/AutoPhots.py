@@ -225,14 +225,14 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     # Collects the photometry that will be used as the 'true' photometry for the source, 
     # collected within an aperture of radius min_rad
     starttime = time.time()
-    phot_sources = perform_photometry(data_sub, data, hdu, apertures_source, instrument, filter, type='source', gal=gal, calc_error=True)
+    phot_sources = perform_photometry(data_sub, data, hdu, apertures_source, instrument, filter, type='source', gal=gal, calc_error=True, savefile=False)
     endtime = time.time()
     print("Time for source photometry:", (endtime-starttime)/60., "minutes")
 
     # Collects the photometry that will be used as the photometry for clusters, 
     # collected within an aperture of radius extended_rad
     starttime = time.time()
-    phot_extended = perform_photometry(data_sub, data, hdu, apertures_extended, instrument, filter, type='extended', gal=gal, calc_error=True)
+    phot_extended = perform_photometry(data_sub, data, hdu, apertures_extended, instrument, filter, type='extended', gal=gal, calc_error=True, savefile=False)
     endtime = time.time()
     print("Time for extended photometry:", (endtime-starttime)/60., "minutes")
 
