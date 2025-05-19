@@ -374,9 +374,8 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     		 radius=3, coordsys="image", outfile=savereg, label=objects["id"].tolist())
 	
     # To plot apertures on top of sources to check if the code is identifying the sources properly.
-    positions = np.transpose((objects["xcentroid"], objects["ycentroid"]))
-	
     if plot:
+        positions = np.transpose((objects["xcentroid"], objects["ycentroid"]))
         apertures = CircularAperture(positions, r=5)
         plt.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, origin='lower')
         apertures.plot(color=aperture_color)
@@ -609,11 +608,11 @@ def perform_photometry(data_sub, data, hdu, apertures, instrument, filter, type,
                             data-data_sub, effective_gain=hdu[0].header["EXPTIME"]))
             
         else: # If jwst instrument
-                photometry = aperture_photometry(data_sub, apertures, error=calc_total_error(data, \
+            photometry = aperture_photometry(data_sub, apertures, error=calc_total_error(data, \
                             data-data_sub, effective_gain=hdu[1].header["XPOSURE"]))
                 
     else: # if you dont need to calculate error
-            photometry = aperture_photometry(data_sub, apertures, method='center')
+        photometry = aperture_photometry(data_sub, apertures, method='center')
             
     if savefile:
         photometry.write("photometry_"+gal+"_"+filter.lower()+"_"+instrument.lower()+"_"+type+suffix+".ecsv", overwrite=True)
