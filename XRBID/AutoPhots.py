@@ -48,14 +48,11 @@ WFC3_UVIS1_zpt = pd.read_csv(file_dir+"/WFC3_UVIS1_zeropoints.txt")
 WFC3_UVIS2_zpt = pd.read_csv(file_dir+"/WFC3_UVIS2_zeropoints.txt")
 
 # Filters for JWST NIRCam 
-long_filter = ["F070W", "F090W", "F115W", "F140M",
-                    "F150W2", "F150W", "F162M", "F164N",
-                    "F182M", "F187N", "F200W", "F210M",
-                    "F212N", "F250M", "F277W", "F300M",
-                    "F322W2", "F323N", "F335M", "F356W",
-                    "F360M", "F405N", "F410M", "F430M",
-                    "F444W", "F460M", "F466N", "F470N"
-                    "F480M"]
+long_filter = [ "F250M", "F277W", "F300M",
+                "F322W2", "F323N", "F335M", "F356W",
+                "F360M", "F405N", "F410M", "F430M",
+                "F444W", "F460M", "F466N", "F470N"
+                "F480M"]
 
 short_filter = ["F070W", "F090W", "F115W", "F140M",
                 "F150W2", "F150W", "F162M", "F164N",
@@ -145,6 +142,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     
     # Setting up zeropoint, if not given
     if not zeropoint: zeropoint = Zeropoint(hdu, filter, instrument)
+    print(f"Using Zeropoint {zeropoint}")
     
     # Setting up EEF, if not given
     # The WFC3 EEF is going to slightly underestimate the correction, because there is no 20 pix correction
@@ -155,9 +153,10 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
 			# Note that in the code below, long_EEFs is being used for the short wavelength filter as well. 
 			# This is because long_EEFs also contain the EEF information on the short wavelength filters.
 			# Also note that both the wavelengths use different conversion rates (check documentation above)
-            if filter in short_filter: EEF = long_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel rads 
-            if filter in long_filter: EEF = long_EEFs.at[19, filter] # 1.60'' as the default, approximating the 20 pixel rads
-			
+            if filter in short_filter: EEF = long_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel radius 
+            if filter in long_filter: EEF = long_EEFs.at[19, filter] # 1.60'' as the default, approximating the 20 pixel radius
+
+    print(f"Using EEF: {EEF}")	
 		
     # Setting up the pixel scale, if not given 
     if not pixtoarcs: 
@@ -168,7 +167,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
             elif instrument.lower() == 'nircam': 
                 if filter in long_filter: pixtoarcs = 0.063 
                 if filter in short_filter: pixtoarcs = 0.031
-
+    print(f"Using pixtoarcs {pixtoarcs}")
         
     # Identifying point sources with DaoFind
     print("Running DaoFind. This may take a while...")
@@ -239,7 +238,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     # If aperture corrections need to be calculated, run CorrectAp()
     if aperture_correction:
         print("Aperture corrections...")
-        apcorrections = CorrectAp(phot_full, radii=ap_rads, EEF=EEF, num_stars=num_stars, zmag=zeropoint, \
+        apcorrections = CorrectAp(phot_full, gal=gal, filter=filter, radii=ap_rads, EEF=EEF, num_stars=num_stars, zmag=zeropoint, \
                               		  min_rad=min_rad, max_rad=max_rad, extended_rad=extended_rad)
         if len(apcorrections) > 0:
             apcorr = apcorrections[0], 
@@ -386,7 +385,7 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     
 ###-----------------------------------------------------------------------------------------------------
 
-def CorrectAp(tab, radii, EEF=False, num_stars=20, return_err=True, zmag=0, min_rad=3, max_rad=20, extended_rad=10):
+def CorrectAp(tab, radii, gal, filter, EEF=False, num_stars=20, return_err=True, zmag=0, min_rad=3, max_rad=20, extended_rad=10):
     
     """
     Generating the correction on the aperture photometry, including the EEF correction from some 
@@ -480,6 +479,7 @@ def CorrectAp(tab, radii, EEF=False, num_stars=20, return_err=True, zmag=0, min_
     for i in temp_select:
     	plt.plot(radii, phots[i]) # where i is the index of the star
     plt.ylim(26,10)
+    plt.savefig(f"radial_profile_{gal}_{filter}.png")
     plt.show()
 
     ans = input("Check all profiles and enter 'y' to continue calculation: ")
