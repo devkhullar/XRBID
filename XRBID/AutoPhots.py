@@ -187,15 +187,22 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
         xcoord_img = [x+reg_correction[0] for x in objects['xcentroid'].tolist()]
         ycoord_img = [y+reg_correction[1] for y in objects['ycentroid'].tolist()]
 
+
     WriteReg(sources=[xcoord_img, ycoord_img], radius=3, coordsys="image", \
     	     outfile=gal+"_daofind_"+filter.lower()+"_"+instrument.lower()+suffix+"_img.reg", \
     	     label=objects["id"].tolist())
     		 
-    wcs = WCS(hdu['PRIMARY'].header)
-    xcoords_fk5, ycoords_fk5 = wcs.wcs_pix2world(xcoord_img, ycoord_img, 1)
+    if instrument.lower() in ['acs', 'wfc3']:
+        wcs = WCS(hdu['PRIMARY'].header)
+        xcoords_fk5, ycoords_fk5 = wcs.wcs_pix2world(xcoord_img, ycoord_img, 1)
+
+    else: # if using JWST
+        wcs = WCS(hdu['SCI'].header)
+        xcoords_fk5, ycoords_fk5 = wcs.wcs_pix2world(xcoord_img, ycoord_img, 1)
+    
     WriteReg(sources=[xcoords_fk5, ycoords_fk5], coordsys="fk5", \
-             outfile=gal+"_daofind_"+filter.lower()+"_"+instrument.lower()+suffix+"_fk5.reg", \
-             radius=0.15, radunit="arcsec", label=objects["id"].tolist())
+                    outfile=gal+"_daofind_"+filter.lower()+"_"+instrument.lower()+suffix+"_fk5.reg", \
+                    radius=0.15, radunit="arcsec", label=objects["id"].tolist())
              
     print("\n", len(objects), "sources found.")
     print("Background subtraction...")
