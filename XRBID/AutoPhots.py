@@ -41,7 +41,7 @@ file_dir = os.path.dirname(os.path.abspath(__file__))
 ACS_EEFs = pd.read_csv(file_dir+"/ACS_WFC_EEFs.txt")          # Using new EEFs for ACS as of 7/19/23
 WFC3_EEFs = pd.read_csv(file_dir+"/WFC3_UVIS1_EEFs.frame")    # Using new EEFs for WFC3 as of 7/19/23
 short_EEFs = pd.read_csv(file_dir+"/Encircled_Energy_SW_ETCv2.csv") # EEFs for the short wavelength filter
-long_EEFs = pd.read_csv(file_dir+"/Encircled_Energy_SW_ETCv2.csv")  # EEFs for the long wavelength filter
+long_EEFs = pd.read_csv(file_dir+"/Encircled_Energy_LW_ETCv2.csv")  # EEFs for the long wavelength filter
 
 # WFC3 zeropoints from: https://www.stsci.edu/files/live/sites/www/files/home/hst/instrumentation/wfc3/documentation/instrument-science-reports-isrs/_documents/2021/WFC3_ISR_2021-04.pdf
 WFC3_UVIS1_zpt = pd.read_csv(file_dir+"/WFC3_UVIS1_zeropoints.txt")
@@ -221,7 +221,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
 	
 	# Collects the photometry over the full range of the apertures needed for the aperture correction step
     starttime = time.time()
-    phot_full = perform_photometry(data_sub, data, hdu, apertures_full, instrument, filter, type='full', gal=gal, calc_error=False)
+    phot_full = perform_photometry(data_sub, data, hdu, apertures_full, instrument, filter, type='full', gal=gal, suffix=suffix, calc_error=False, savefile=True)
     endtime = time.time()
     print("Time for full photometry:", (endtime-starttime)/60., "minutes")
 	
@@ -231,14 +231,14 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     # Collects the photometry that will be used as the 'true' photometry for the source, 
     # collected within an aperture of radius min_rad
     starttime = time.time()
-    phot_sources = perform_photometry(data_sub, data, hdu, apertures_source, instrument, filter, type='source', gal=gal, calc_error=True, savefile=False)
+    phot_sources = perform_photometry(data_sub, data, hdu, apertures_source, instrument, filter, type='source', gal=gal, calc_error=True, suffix=suffix, savefile=False)
     endtime = time.time()
     print("Time for source photometry:", (endtime-starttime)/60., "minutes")
 
     # Collects the photometry that will be used as the photometry for clusters, 
     # collected within an aperture of radius extended_rad
     starttime = time.time()
-    phot_extended = perform_photometry(data_sub, data, hdu, apertures_extended, instrument, filter, type='extended', gal=gal, calc_error=True, savefile=False)
+    phot_extended = perform_photometry(data_sub, data, hdu, apertures_extended, instrument, filter, type='extended', gal=gal, calc_error=True, suffix=suffix, savefile=False)
     endtime = time.time()
     print("Time for extended photometry:", (endtime-starttime)/60., "minutes")
 
@@ -576,7 +576,7 @@ def RemoveExt(Ebv, wave, mag):
     
 ###-----------------------------------------------------------------------------------------------------
 
-def perform_photometry(data_sub, data, hdu, apertures, instrument, filter, type, gal, suffix="", calc_error=True, savefile=True):
+def perform_photometry(data_sub, data, hdu, apertures, instrument, filter, type, gal, suffix="", calc_error=True, savefile=False):
     '''
     A helper function to calculate the aperture photometry.
 	
