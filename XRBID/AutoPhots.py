@@ -244,7 +244,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     if aperture_correction:
         print("Aperture corrections...")
         apcorrections = CorrectAp(phot_full, gal=gal, filter=filter, radii=ap_rads, EEF=EEF, num_stars=num_stars, zmag=zeropoint, \
-                              		  min_rad=min_rad, max_rad=max_rad, extended_rad=extended_rad)
+                              		  min_rad=min_rad, max_rad=max_rad, extended_rad=extended_rad, suffix=suffix)
         if len(apcorrections) > 0:
             apcorr = apcorrections[0], 
             aperr = apcorrections[1]
@@ -390,7 +390,7 @@ def DaoFindObjects(data, fwhm, pixtoarcs, sigma=5, threshold=5.0, sharplo=0.2, s
     
 ###-----------------------------------------------------------------------------------------------------
 
-def CorrectAp(tab, radii, gal, filter, EEF=False, num_stars=20, return_err=True, zmag=0, min_rad=3, max_rad=20, extended_rad=10):
+def CorrectAp(tab, radii, gal, filter, EEF=False, num_stars=20, return_err=True, zmag=0, min_rad=3, max_rad=20, extended_rad=10, suffix=""):
     
     """
     Generating the correction on the aperture photometry, including the EEF correction from some 
@@ -484,9 +484,9 @@ def CorrectAp(tab, radii, gal, filter, EEF=False, num_stars=20, return_err=True,
     for i in temp_select:
     	plt.plot(radii, phots[i]) # where i is the index of the star
     plt.ylim(26,10)
-    plt.savefig(f"radial_profile_{gal}_{filter}.png")
+    plt.savefig(f"radial_profile_{gal}_{filter}_{suffix}.png")
     plt.show()
-    print(f"Saving radial_profile_{gal}_{filter}.png")
+    print(f"Saving radial_profile_{gal}_{filter}_{suffix}.png")
 
     ans = input("Check all profiles and enter 'y' to continue calculation: ")
     if "y" in ans:
