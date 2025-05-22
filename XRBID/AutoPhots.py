@@ -152,7 +152,7 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
         elif instrument.lower() == 'nircam':
 			# Note that both the wavelengths for JWST use different conversion rates (check documentation above)
             if filter in short_filter: EEF = short_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel radius 
-            if filter in long_filter: EEF = long_EEFs.at[19, filter] # 1.60'' as the default, approximating the 20 pixel radius
+            if filter in long_filter: EEF = long_EEFs.at[19, filter] # 1.20'' as the default, approximating the 20 pixel radius
 
     print(f"Using EEF: {EEF}")	
 		
