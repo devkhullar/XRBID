@@ -150,10 +150,8 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
         if instrument.lower() == 'acs': EEF = ACS_EEFs[ACS_EEFs['Filter']==filter.upper()].reset_index()['20'][0]
         elif instrument.lower() == 'wfc3': EEF = WFC3_EEFs[WFC3_EEFs['Filter']==filter.upper()].reset_index()['20.75'][0]
         elif instrument.lower() == 'nircam':
-			# Note that in the code below, long_EEFs is being used for the short wavelength filter as well. 
-			# This is because long_EEFs also contain the EEF information on the short wavelength filters.
-			# Also note that both the wavelengths use different conversion rates (check documentation above)
-            if filter in short_filter: EEF = long_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel radius 
+			# Note that both the wavelengths for JWST use different conversion rates (check documentation above)
+            if filter in short_filter: EEF = short_EEFs.at[14, filter] # 0.60'' as the default, approximating the 20 pixel radius 
             if filter in long_filter: EEF = long_EEFs.at[19, filter] # 1.60'' as the default, approximating the 20 pixel radius
 
     print(f"Using EEF: {EEF}")	
