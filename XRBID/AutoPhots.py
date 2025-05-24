@@ -609,7 +609,7 @@ def perform_photometry(data_sub, data, hdu, apertures, instrument, filter, type,
     hst_instrument = ['acs', 'wfc3']
     if calc_error:  # If error needs to be calculated (this is mainly for extended and source photometry)
         # If hst instrument
-        if instrument in hst_instrument: 
+        if instrument.lower() in hst_instrument: 
             photometry = aperture_photometry(data_sub, apertures, error=calc_total_error(data, \
                             data-data_sub, effective_gain=hdu[0].header["EXPTIME"]))
             
