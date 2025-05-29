@@ -27,7 +27,7 @@ ID = "ID"
 
 ###-----------------------------------------------------------------------------------------------------
 
-def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zscale", imgnames=None, imgsize=[305,305], outfile=None, unique_scale=False, coords=None, ids=None, idheader="ID", filetype="jpeg", basefilter=["red"], filterorder=["red", "green", "blue"], zoom=8, env_zoom=2, coordsys=None, tile=False): 
+def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zscale", imgnames=None, imgsize=[305,305], outfile=None, unique_scale=False, coords=None, ids=None, idheader="ID", filetype="jpeg", basefilter=["red"], filterorder=["red", "green", "blue"], zoom=8, env_zoom=2, coordsys=None, tile=False, path_to_ds9=False): 
 
 	"""
 	Generates a bash script that will write a program for taking thumbnails/snapshots in DS9 of sources in a given DataFrame. 
@@ -66,6 +66,7 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 	coordsys	[str]		:	Coordinate system of the source coordinates (image or fk5 preferred). 
 	tile		[bool]		:	Determines whether to save a tiled image, in which each of the color channels are tiled side-by-side instead of opening a 
 						full color image. Default is False. 
+	path_to_ds9 [string]    :   Path to the directory which stores ds9. Only to be used if your ds9 is not configured properly for the bash script to work.
 						
 	"""
 	
@@ -138,7 +139,10 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 			with open(outfile, 'w') as f: 
 				f.write("#! /bin/bash\necho \"Creating images of " + galaxy + " sources. Please wait...\"\n")
 				# code for opening color image of galaxies
-				f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
+				if not path_to_ds9:
+					f.write("{path_to_ds9} -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
+				else:
+					f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
 				f.write(" \\\n-" + filterorder[1] + " -zscale " + colorfiles[1])
 				f.write(" \\\n-" + filterorder[2] + " -zscale " + colorfiles[2] + " \\\n") 
 				# code for opening region files (if applicable)
