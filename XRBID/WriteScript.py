@@ -139,8 +139,8 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 			with open(outfile, 'w') as f: 
 				f.write("#! /bin/bash\necho \"Creating images of " + galaxy + " sources. Please wait...\"\n")
 				# code for opening color image of galaxies
-				if not path_to_ds9:
-					f.write("{path_to_ds9} -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
+				if path_to_ds9:
+					f.write(f"{path_to_ds9} -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
 				else:
 					f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
 				f.write(" \\\n-" + filterorder[1] + " -zscale " + colorfiles[1])
