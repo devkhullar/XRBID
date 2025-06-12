@@ -1,8 +1,8 @@
 ###########################################################################################
 ##########	For writing scripts, such as bash scripts and region files	########### 
-##########	                Last Update: May 09, 2025               	########### 
-##########	(Major overhaul of WriteReg, deleted unneeded functions, and	########### 
-##########	added new function, CombineReg. Added descriptions to others.)	###########
+##########	                Last Update: Jun 03, 2025               	########### 
+##########	Streamlined some I/O code, made minor changes to WriteDS9.	########### 
+##########	Major fix leftover from removing tiling from WriteDS9.		########### 
 ###########################################################################################
 
 import math
@@ -27,7 +27,7 @@ ID = "ID"
 
 ###-----------------------------------------------------------------------------------------------------
 
-def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zscale", imgnames=None, imgsize=[305,305], outfile=None, unique_scale=False, coords=None, ids=None, idheader="ID", filetype="jpeg", basefilter=["red"], filterorder=["red", "green", "blue"], zoom=8, env_zoom=2, coordsys=None, tile=False, path_to_ds9=False): 
+def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zscale", imgnames=None, imgsize=[305,305], outfile=None, unique_scale=False, coords=None, ids=None, idheader="ID", filetype="jpeg", basefilter=["red"], filterorder=["red", "green", "blue"], zoom=8, env_zoom=2, coordsys=None, path_to_ds9=False): 
 
 	"""
 	Generates a bash script that will write a program for taking thumbnails/snapshots in DS9 of sources in a given DataFrame. 
@@ -38,6 +38,13 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 	the default green (Ex. red used as the base filter in M81). The very first basefilter should be the main filter used for imaging, even if 
 	the region files are aligned to different filters. Filters should be called in the order they're intended to be used (default [red, green, blue]). 
 	If a different order is used, the order should be declared using the 'filterorder' parameter. 
+
+	PLANNED UPDATE (post v1.7.1): 
+	WriteDS9 will be updated such that the user can read in a list of zoom factors, rather than set just the 'zoom' and 'zoom_env' 
+	parameters. This update will render the 'env_zoom' parameters obsolete. WriteDS9 will check whether 'zoom' is a list and, if so,
+	will add to the image names to label them `_zoom{zoom factor}` before the user-defined suffix (if given). This will allow more 
+	than two zoom factors to be given, allowing greater flexibility for the user. 
+
 
 	PARAMETERS: 
 	-----------
@@ -58,11 +65,13 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 	ids		[list]		:	List of source IDs. Only needed if only coordinates are provided (to build new DataFrame). 
 	idheader	[str]		:	Header of the ID column in the DataFrame. Defaults to "ID". 
 	filetype	[str]		: 	File format of the images to be saved. Defaults to "jpeg" to save memory, but "png" may also be used. 
-	basefilter	[str]		:	The filter/channel whose coordinates are to be used when opening region files. This is useful when there are slight coordinate
-						differences between the filters and/or the region files were created using a specific base filter. Default is "red". 
+	basefilter	[str]		:	The filter/channel whose coordinates are to be used when opening region files. This is useful when there are slight 
+						coordinate differences between the filters and/or the region files were created using a specific base filter. 
+						Default is "red". 
 	filterorder	[list]		:	Order in which the filters were input. The default is ["red","green","blue"]. 
 	zoom		[int]		:	DS9 zoom setting, for the closest zoom. Default is 8. 
-	env_zoom	[int]		:	DS9 zoom setting, for the farthest zoom. This allows DS9 to take an image of the environment around each source. Default is 2. 
+	env_zoom	[int]		:	DS9 zoom setting, for the farthest zoom. This allows DS9 to take an image of the 
+						environment around each source. Default is 2. (Will be depricated after v1.7.2).
 	coordsys	[str]		:	Coordinate system of the source coordinates (image or fk5 preferred). 
 	tile		[bool]		:	Determines whether to save a tiled image, in which each of the color channels are tiled side-by-side instead of opening a 
 						full color image. Default is False. 
@@ -74,188 +83,6 @@ def WriteDS9(df=None, galaxy="galaxy", colorfiles=None, regions=None, scales="zs
 
 	if ".txt" in scales: unique_scale = True
 
-	if tile: # If tiling is set to True, need to run this enitrely differently
-		WriteDS9_tile(frame=frame, galaxy=galaxy, colorfiles=colorfiles, regions=regions, scales=scales, \
-			      imgnames=imgnames, imgsize=imgsize, outfile=outfile, unique_scale=unique_scale, \
-		              coords=coords, filetype=filetype, zoom=zoom, env_zoom=env_zoom, coordsys=coordsys,ids=ids)
-
-	# If tiling is not set to true, continue...
-	else: 
-		good = False
-
-		# If only coordinates are given, build DataFrame from those.
-		try: 
-			if not frame: 
-				if coordsys == "fk5" or coordsys == "wcs": 
-					headers = ["ID", "RA", "Dec"]
-				else: headers = ["ID", "x", "y"]
-				if not ids: ids = np.arange(coords[0]).tolist()
-				frame = BuildFrame(headers=headers, values=[ids, coords[0], coords[1]])
-		except: pass;
-	
-		frame = frame.copy()
-		display(frame) 
-
-		if colorfiles == None: # Name of the files for RGB frames needed
-			while not good: 
-				colorfiles = input("Names of .fits files for galaxy color map (red, green, blue; separate by commas): ")
-				colorfiles = colorfiles.split(",")
-				if len(colorfiles) == 3: good = True
-				else: print("Not enough color files provided."); colorfiles = None; 
-		
-		if regions == None: # In case region files were forgotten, ask user for input. 
-			regions = input("Region files? (separate by commas, or Enter if none):") 
-			regions = regions.split(",")
-		if not isinstance(regions, list): regions = [regions]  # region files should be lists
-
-		# basefilter should be indicated for every region
-		# If only one basefilter is given, assume all regions are aligned to that filter.
-		if not isinstance(basefilter, list): 
-			basefilter = [basefilter]
-		if len(basefilter) == 1 and regions: basefilter = [basefilter[0]]*len(regions)
-		base = filterorder[0]
-
-		if outfile == None: # Name of output script file
-			outfile = input("Output (script) file name?: ")
-			if len(outfile) == 0: outfile = galaxy+".sh" # if no name is given, just use the galaxy name
-			if len(outfile.split(".")) < 2: outfile = outfile+".sh" # if .sh is not included in the name, add it
-
-
-		### If using unique scales for each source ###
-		if unique_scale == True: 
-			# Currently, this looks at the unique scalings file and finds all sources in there in the DataFrame. 
-			# It might be more useful to look for the scaling for each DataFrame source read in. 
-			# To do that, may want to convert the scalings to a DataFrame and perform as search on it.
-			scalings = None
-			try: 
-				try: scalings  = np.genfromtxt(galaxy+"_scalings.txt", dtype=str).tolist() 
-				except: 
-					if ".txt" in scales: 
-						scalings = np.genfromtxt(scales, dtype=str).tolist()
-					else: scalings = np.genfromtxt(raw_input("Unique scalings file?: "), dtype=None).tolist()
-			except: print("\nUnique scalings file not found.")
-			#try: 
-			print("Writing " + outfile + "...")
-			with open(outfile, 'w') as f: 
-				f.write("#! /bin/bash\necho \"Creating images of " + galaxy + " sources. Please wait...\"\n")
-				# code for opening color image of galaxies
-				if path_to_ds9:
-					f.write(f"{path_to_ds9} -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
-				else:
-					f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])	# green needs to be opened first, for alignment reasons
-				f.write(" \\\n-" + filterorder[1] + " -zscale " + colorfiles[1])
-				f.write(" \\\n-" + filterorder[2] + " -zscale " + colorfiles[2] + " \\\n") 
-				# code for opening region files (if applicable)
-				try: 
-					for i in range(len(regions)): 
-						f.write("-" + basefilter[i] + " -region load " + regions[i] + " ")
-				except: pass;
-				# For each of the scalings, look to see if the source is in the DataFrame
- 				#  Making sure the scalings is in the right form
-				if not isinstance(scalings[0], list): scalings = [scalings]
-				# If so, save image. If not, pass.
-				for k in range(len(scalings)):
-					j = scalings[k]
-					#try: 
-					if isinstance(imgnames, list): tempname = str(imgnames[k])
-					else: tempname = str(imgnames) + "_" + j[0] # if imgname is given, use it
-					#except: tempname = j[0]
-
-					# Search dataframe for the scaling ID
-					temp = FindUnique(frame, idheader + " = " + j[0])
-					
-					# If ID is found, print pan script to .sh file
-					if len(temp) > 0:
-						f.write("\\\n-zoom to " + str(zoom) + " ")
-						if coordsys == "img" or coordsys == "image":
-							f.write("\\\n\\\n-" + base + " -pan to " + str(temp["x"].values[0]) + " " + str(temp["y"].values[0]) + " image " )
-						elif coordsys == "galaxy" or coordsys == "fk5":
-							f.write("\\\n-" + base + " -pan to " + str(temp["RA"].values[0]) + " " + str(temp["Dec"].values[0]) + " fk5 ")
-						else:
-							try: f.write("\\\n\\\n-" + base + " -pan to " + str(temp["x"].values[0]) + " " + str(temp["y"].values[0]) + " image " )
-							except: f.write("\\\n-" + base + " -pan to " + str(temp["RA"].values[0]) + " " + str(temp["Dec"].values[0]) + " fk5 ")
-						if j[1] == "-zscale" or j[1] == "zscale":
-							f.write("\\\n-red -zscale -green -zscale -blue -zscale ")
-						else: f.write("\\\n-red -scale limits 0 " + str(j[1]) + " -green -scale limits 0 " + str(j[2]) + " -blue -scale limits 0 " + str(j[3]) + " ")
-						f.write("\\\n-saveimage " + filetype + " " + tempname +"."+filetype+" ")
-						f.write("\\\n-zoom to " + str(env_zoom) + " ")
-						f.write("\\\n-saveimage " + filetype + " " + tempname + "_env." + filetype + " ")
-					else: pass;
-				f.write("\\\n-exit\necho \"Done.\"")               
-			f.close()
-			print("DONE")
-			#except: print("Error creating file.")
-
-
-
-		### If not using unique scales for each source (default) ###
-		else: 
-			if scales == None:
-				scales = []
-				temp = "none" 
-				while len(temp) > 0:
-					temp = input("Color scales? (enter one at a time. Example: \"zscale\" or [\"red\", 10, 5, 2.5]. Press Enter when finished.)")
-					if len(temp)>0: scales.append([x for x in re.split(",", temp)])
-			
-			if not isinstance(scales, list): scales = [scales] # Scales should be a list
-			print("Writing " + outfile + "...")
-			with open(outfile, 'w') as f: 
-				f.write("#! /bin/bash\necho \"Creating images of " + galaxy + " sources. Please wait...\"\n")
-				# code for opening color image of galaxies
-				f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1])+" -colorbar no \\\n-rgb -" + filterorder[0] + " -zscale " + colorfiles[0])
-				f.write(" \\\n-" + filterorder[1] + " -zscale " + colorfiles[1])
-				f.write(" \\\n-" + filterorder[2] + " -zscale " + colorfiles[2] + " \\\n") 
-				# code for opening region files
-				try:
-					for i in range(len(regions)): 
-						f.write("-" + basefilter[i] + " -region load " + regions[i] + " ")
-				except: pass;
-				for i in range(len(frame)): 
-					f.write("\\\n-zoom to " + str(zoom) + " ")
-					if coordsys == "img" or coordsys == "image":
-						f.write("\\\n-" + base + " -pan to " + str(frame["x"][i]) + " " + str(frame["y"][i]) + " image " )
-					elif coordsys == "galaxy" or coordsys == "fk5":
-						f.write("\\\n-" + base + " -pan to " + str(frame["RA"][i]) + " " + str(frame["Dec"][i]) + " fk5 ")
-					else:
-						try: f.write("\\\n-" + base + " -pan to " + str(frame["x"][i]) + " " + str(frame["y"][i]) + " image " )
-						except: f.write("\\\n-" + base + " -pan to " + str(frame["RA"][i]) + " " + str(frame["Dec"][i]) + " fk5 ")
-					for j in scales: 
-						try: j = j.strip(",")
-						except: j[0] = j[0].strip(",")
-						if not isinstance(j, list): j = [j] # Convert to list
-
-						# If a list of image names is given, use this. 
-						# Else, if imgnames is a prefix, apply source numbers to image file name.
-						# NOTE: SOMETHING IS GOING WRONG HERE WHEN UNIQUE SCALES AREN'T USED. WILL NEED TO LOOK INTO THIS LATER!
-						if isinstance(imgnames, list): imgtemp = imgnames[i]
-						else: imgtemp = imgnames+"%03i"%(i)
-
-						if len(j) == 1:
-							f.write("\\\n\\\n-red -zscale -green -zscale -blue -zscale ")
-							pass;
-						elif len(j) > 3: 
-							f.write("\\\n\\\n-red -scale limits 0 "+str(j[1])+" -green -scale limits 0 "+str(j[2])+" -blue -scale limits 0 "+str(j[3])+" ")
-							# In the case where multiple, non-unique scales are given, append current scale to imagenames
-							if len(scales) > 1: imgtemp = [n + "_" + j[0] for n in imgtemp]
-							else: pass;
-							pass;
-						f.write("\\\n-saveimage jpeg " + imgtemp + ".jpg ")
-				f.write("\\\n-exit\necho \"Done.\"")               
-			f.close()
-			print("DONE") 
-				
-			
-
-
-###-----------------------------------------------------------------------------------------------------
-
-
-def WriteDS9_tile(frame=None, galaxy="M81", colorfiles=None, regions=None, scales="zscale", imgnames=None, imgsize=[305,305], outfile=None, unique_scale=False, coords=None, filetype="jpeg", zoom=8, env_zoom=2, coordsys=None, ids=None): 
-
-	"""Arguments: (DataFrame, Galaxy name, Galaxy color .fits files in RGB order, Region files, Desired color scales, Output image name (number will be appended to the image), Output file name).
-
- Generates a bash script that will write a program for taking thumbnails/snapshots in DS9 of sources in a given DataFrame, but tiled by red, green, and blue! Will take in a list of region files for each frame, and different scales to use to adjust the RGB colors of the image. Scales should be input with the format ["scale name", redscale, greenscale, bluescale], or, if unique_scale is True, the name of the file with the unique scalings should be used. If zscale is being used, only ["zscale"] is needed. Parameter basefilter can be used to set which filter the region file should be aligned to, if not the default green (Ex. red used as the base filter in M81). The very first basefilter should be the main filter used for imaging, even if the region files are aligned to different filters. Filters should be called in the order they're intended to be used (default [red, green, blue]. If a different order is used, the order should be declared using the 'filterorder' parameter. UNDER CONSTRUCTION! """
-	
 	good = False
 
 	# If only coordinates are given, build DataFrame from those.
@@ -269,13 +96,26 @@ def WriteDS9_tile(frame=None, galaxy="M81", colorfiles=None, regions=None, scale
 	except: pass;
 
 	frame = frame.copy()
+	#display(frame) 
 
-	#if colorfiles == None: # Name of the files for RGB frames needed
-	#	while not good: 
-	#		colorfiles = input("Names of .fits files for galaxy color map (red, green, blue; separate by commas): ")
-	#		colorfiles = colorfiles.split(",")
-	#		if len(colorfiles) == 3: good = True
-	#		else: print("Not enough color files provided."); colorfiles = None; 
+	if colorfiles == None: # Name of the files for RGB frames needed
+		while not good: 
+			colorfiles = input("Names of .fits files for galaxy color map (red, green, blue; separate by commas): ")
+			colorfiles = [c.strip() for c in colorfiles.split(",")] # breaks up filters and removes trailing/leading whitespace
+			if len(colorfiles) == 3: good = True
+			else: print("Not enough color files provided."); colorfiles = None; 
+		
+	if regions == None: # In case region files were forgotten, ask user for input. 
+		regions = input("Region files? (separate by commas, or Enter if none):") 
+		regions = [r.strip() for r in regions.split(",")]
+	if not isinstance(regions, list): regions = [regions]  # region files should be lists
+
+	# basefilter should be indicated for every region
+	# If only one basefilter is given, assume all regions are aligned to that filter.
+	if not isinstance(basefilter, list): 
+		basefilter = [basefilter]
+	if len(basefilter) == 1 and regions: basefilter = [basefilter[0]]*len(regions)
+	base = filterorder[0]
 
 	if outfile == None: # Name of output script file
 		outfile = input("Output (script) file name?: ")
@@ -283,98 +123,98 @@ def WriteDS9_tile(frame=None, galaxy="M81", colorfiles=None, regions=None, scale
 		if len(outfile.split(".")) < 2: outfile = outfile+".sh" # if .sh is not included in the name, add it
 
 
-	print("Writing " + outfile + "...")
-	with open(outfile, 'w') as f: 
-		f.write("#! /bin/bash\necho \"Creating images of " + galaxy + " sources. Please wait...\"\n")
-		# code for opening color image of galaxies
-		f.write("ds9 -height "+str(imgsize[0])+" -width "+str(imgsize[1]*len(colorfiles))+" -colorbar no")
+	### If using unique scales for each source ###
+	if unique_scale == True: 
+		# Currently, this looks at the unique scalings file and finds all sources in there in the DataFrame. 
+		# It might be more useful to look for the scaling for each DataFrame source read in. 
+		# To do that, may want to convert the scalings to a DataFrame and perform as search on it.
 
-		# Open first frame and regions
-		f.write(" \\\n-frame 1 " + colorfiles[0] + " -lock frame wcs -tile yes -tile column \\\n")
-		try: 
-			for i in range(len(regions[0])): 
-				f.write("-region load " + regions[0][i] + " \\\n")
-		except: pass;
+		if ".txt" in scales: scalings = np.genfromtxt(scales, dtype=str).tolist()
+		else: scalings = np.genfromtxt(input("Unique scalings file?: "), dtype=None).tolist()
 
-		# Open the rest of the frames
-		for i in range(1,len(colorfiles)):
-			f.write("-frame " + str(i + 1) + " " + colorfiles[i] + " \\\n")
+		#try: 
+		print(f"Writing {outfile}...")
+		with open(outfile, 'w') as f: 
+			f.write(f"#! /bin/bash\necho \"Creating images of {galaxy} sources. Please wait...\"\n")
+			# code for opening color image of galaxies
+			f.write(f"ds9 -height {imgsize[0]} -width {imgsize[1]} -colorbar no \\\n-rgb -{filterorder[0]} -zscale {colorfiles[0]}")	# green needs to be opened first, for alignment reasons
+			f.write(f" \\\n-{filterorder[1]} -zscale {colorfiles[1]}")
+			f.write(f" \\\n-{filterorder[2]} -zscale {colorfiles[2]} \\\n") 
+			# code for opening region files (if applicable)
 			try: 
-				for j in range(len(regions[i])): 
-					f.write("-region load " + regions[i][j] + " \\\n")
+				for i in range(len(regions)): 
+					f.write(f"-{basefilter[i]} -region load {regions[i]} ")
 			except: pass;
-
-
-		### If using unique scales for each source ###
-		if unique_scale == True: 
-			scalings = None
-			try: 
-				try: scalings  = np.genfromtxt(galaxy+"_scalings.txt", dtype=str) 
-				except: 
-					if ".txt" in scales: 
-						scalings = np.genfromtxt(scales, dtype=str).tolist()
-					else: scalings = np.genfromtxt(raw_input("Unique scalings file?: "), dtype=None).tolist()
-			except: print("\nUnique scalings file not found.")
-			
-			# The code below assumes more than one unique scale is in the list
-			# If it isn't, set scalings as a list within a list to make it work
-			if not isinstance(scalings[0], list): scalings = [scalings]
-
 			# For each of the scalings, look to see if the source is in the DataFrame
+			#  Making sure the scalings is in the right form
+			if not isinstance(scalings[0], list): scalings = [scalings]
 			# If so, save image. If not, pass.
-			# In general, scalings is assumed to be a list of scalings with multiple sources included.
-			# If only one source is in the unique scale file, will need to run another way
 			for k in range(len(scalings)):
 				j = scalings[k]
+				#try: 
 				if isinstance(imgnames, list): tempname = str(imgnames[k])
-				else: tempname = str(imgnames) + "_" + j[0] # if imgname is given, use it
+				else: tempname = f"{imgnames}_{j[0]}" # if imgname is given, use it
+				#except: tempname = j[0]
 
 				# Search dataframe for the scaling ID
-				temp = FindUnique(frame, "ID = " + j[0])
-
+				temp = FindUnique(frame, f"{idheader} = {j[0]}")
+					
 				# If ID is found, print pan script to .sh file
 				if len(temp) > 0:
-					f.write("\\\n-zoom to " + str(zoom) + " ")
+					f.write(f"\\\n-zoom to {zoom} ")
 					if coordsys == "img" or coordsys == "image":
-						f.write("\\\n\\\n-frame 1 -pan to " + str(temp["x"].values[0]) + " " + str(temp["y"].values[0]) + " image " )
+						try: f.write(f"\\\n\\\n-{base} -pan to {temp["x"].values[0]} {temp["y"].values[0]} image " )
+						except: f.write(f"\\\n\\\n-{base} -pan to {temp["X"].values[0]} {temp["Y"].values[0]} image " )
 					elif coordsys == "galaxy" or coordsys == "fk5":
-						f.write("\\\n-frame 1 -pan to " + str(temp["RA"].values[0]) + " " + str(temp["Dec"].values[0]) + " fk5 ")
+						f.write(f"\\\n-{base} -pan to {temp["RA"].values[0]} {temp["Dec"].values[0]} fk5 ")
 					else:
-						try: f.write("\\\n\\\n-frame 1 -pan to " + str(temp["x"].values[0]) + " " + str(temp["y"].values[0]) + " image " )
-						except: f.write("\\\n-frame 1 -pan to " + str(temp["RA"].values[0]) + " " + str(temp["Dec"].values[0]) + " fk5 ")
-					f.write("\\\n")
+						try: f.write(f"\\\n\\\n-{base} -pan to {temp["x"].values[0]} {temp["y"].values[0]} image " )
+						except: f.write(f"\\\n-{base} -pan to {temp["RA"].values[0]} {temp["Dec"].values[0]} fk5 ")
 					if j[1] == "-zscale" or j[1] == "zscale":
-						for i in range(1,len(colorfiles)+1): 
-							f.write("-frame " + str(i) + " -zscale ")
-					else: 
-						for i in range(1,len(colorfiles)+1): 
-							f.write("-frame " + str(i) + " -scale limits 0 " + str(j[i]) + " ")
-					f.write("\\\n-saveimage " + filetype + " " + tempname +"."+filetype+" ")
-					f.write("\\\n-zoom to " + str(env_zoom) + " ")
-					f.write("\\\n-saveimage " + filetype + " " + tempname + "_env." + filetype + " ")
+						f.write("\\\n-red -zscale -green -zscale -blue -zscale ")
+					else: f.write(f"\\\n-red -scale limits 0 {j[1]} -green -scale limits 0 {j[2]} -blue -scale limits 0 {j[3]} ")
+					f.write(f"\\\n-saveimage {filetype} {tempname}.{filetype} ")
+					f.write(f"\\\n-zoom to {env_zoom} ")
+					f.write(f"\\\n-saveimage {filetype} {tempname}_env.{filetype} ")
 				else: pass;
+			f.write("\\\n-exit\necho \"Done.\"")               
+		f.close()
+		print("DONE")
+		#except: print("Error creating file.")
 
 
-		### If not using unique scales for each source (default) ###
-		### NOTE: This part still needs to be edited to allow any number of colorfiles to be tiled, not just 3. (2/9/22) ###
-		else: 
-			if scales == None:
-				scales = []
-				temp = "none" 
-				while len(temp) > 0:
-					temp = input("Color scales? (enter one at a time. Example: \"zscale\" or [\"red\", 10, 5, 2.5]. Press Enter when finished.)")
-					if len(temp)>0: scales.append([x for x in re.split(",", temp)])
+	### If not using unique scales for each source (default) ###
+	else: 
+		if scales == None:
+			scales = []
+			temp = "none" 
+			while len(temp) > 0:
+				temp = input("Color scales? (enter one at a time. Example: \"zscale\" or [\"red\", 10, 5, 2.5]. Press Enter when finished.)")
+				if len(temp)>0: scales.append([x for x in re.split(",", temp)])
 			
-			if not isinstance(scales, list): scales = [scales] # Scales should be a list
+		if not isinstance(scales, list): scales = [scales] # Scales should be a list
+		print(f"Writing {outfile}...")
+		with open(outfile, 'w') as f: 
+			f.write(f"#! /bin/bash\necho \"Creating images of {galaxy} sources. Please wait...\"\n")
+			# code for opening color image of galaxies
+			f.write(f"ds9 -height {imgsize[0]} -width {imgsize[1]} -colorbar no \\\n-rgb -{filterorder[0]} -zscale {colorfiles[0]}")
+			f.write(f" \\\n-{filterorder[1]} -zscale {colorfiles[1]}")
+			f.write(f" \\\n-{filterorder[2]} -zscale {colorfiles[2]} \\\n") 
+			# code for opening region files
+			try:
+				for i in range(len(regions)): 
+					f.write(f"-{basefilter[i]} -region load {regions[i]} ")
+			except: pass;
 			for i in range(len(frame)): 
-				f.write("\\\n-zoom to " + str(zoom) + " ")
+				f.write(f"\\\n-zoom to {zoom} ")
 				if coordsys == "img" or coordsys == "image":
-					f.write("\\\n-frame 1 -pan to " + str(frame["x"][i]) + " " + str(frame["y"][i]) + " image " )
+					try: f.write(f"\\\n-{base} -pan to {frame["x"][i]} {frame["y"][i]} image ")
+					except: f.write(f"\\\n-{base} -pan to {frame["X"][i]} {frame["Y"][i]} image ")
 				elif coordsys == "galaxy" or coordsys == "fk5":
-					f.write("\\\n-frame 1 -pan to " + str(frame["RA"][i]) + " " + str(frame["Dec"][i]) + " fk5 ")
+					f.write(f"\\\n-{base} -pan to {frame["RA"][i]} {frame["Dec"][i]} fk5 ")
 				else:
-					try: f.write("\\\n-frame 1 -pan to " + str(frame["x"][i]) + " " + str(frame["y"][i]) + " image " )
-					except: f.write("\\\n-frame 1 -pan to " + str(frame["RA"][i]) + " " + str(frame["Dec"][i]) + " fk5 ")
+					try: f.write(f"\\\n-{base} -pan to {frame["x"][i]} {frame["y"][i]} image " )
+					except: f.write(f"\\\n-{base} -pan to {frame["RA"][i]} {frame["Dec"][i]} fk5 ")
 				for j in scales: 
 					try: j = j.strip(",")
 					except: j[0] = j[0].strip(",")
@@ -382,28 +222,23 @@ def WriteDS9_tile(frame=None, galaxy="M81", colorfiles=None, regions=None, scale
 
 					# If a list of image names is given, use this. 
 					# Else, if imgnames is a prefix, apply source numbers to image file name.
-					if len(imgnames) > 1: imgtemp = imgnames[i]
+					# NOTE: SOMETHING IS GOING WRONG HERE WHEN UNIQUE SCALES AREN'T USED. WILL NEED TO LOOK INTO THIS LATER!
+					if isinstance(imgnames, list): imgtemp = imgnames[i]
 					else: imgtemp = imgnames+"%03i"%(i)
 
 					if len(j) == 1:
-						f.write("\\\n\\\n-frame 1 -zscale -frame 2 -zscale -frame 3 -zscale ")
+						f.write("\\\n\\\n-red -zscale -green -zscale -blue -zscale ")
 						pass;
 					elif len(j) > 3: 
-						f.write("\\\n\\\n-frame 1 -scale limits 0 "+str(j[1])+" -frame 2 -scale limits 0 "+str(j[2])+" -frame 3 -scale limits 0 "+str(j[3])+" ")
+						f.write(f"\\\n\\\n-red -scale limits 0 {j[1]} -green -scale limits 0 {j[2]} -blue -scale limits 0 {j[3]} ")
 						# In the case where multiple, non-unique scales are given, append current scale to imagenames
 						if len(scales) > 1: imgtemp = [n + "_" + j[0] for n in imgtemp]
 						else: pass;
 						pass;
-					f.write("\\\n-saveimage jpeg " + imgtemp + ".jpg ")
-
-		### END WRITE TO FILE ###
-
-		f.write("\\\n-exit\necho \"Done.\"")               
+					f.write(f"\\\n-saveimage jpeg {imgtemp}.jpg ")
+			f.write("\\\n-exit\necho \"Done.\"")               
 		f.close()
-		print("DONE")
-			
-			
-
+		print("DONE") 
 
 ###-----------------------------------------------------------------------------------------------------
 
@@ -578,7 +413,7 @@ def WriteReg(sources, outfile, coordsys=False, coordheads=False, coordnames=Fals
     reg_props = [r+"\n" for r in reg_props] 
     
     # Putting together the full region line using the coordinates of each source
-    f_reg = [reg+str(x_coords[i])+", "+str(y_coords[i])+r for i,r in enumerate(reg_props)]
+    f_reg = [reg+str(x_coords[i]+addshift[0])+", "+str(y_coords[i]+addshift[1])+r for i,r in enumerate(reg_props)]
 
     #### WRITING THE REGION FILE ####
     print("Saving", outfile)

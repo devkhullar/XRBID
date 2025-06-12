@@ -1,7 +1,8 @@
 ###################################################################################
 ##########	For plotting CMDs, along with mass tracks 		########### 
-##########	Last updated: April 2025				###########	
-##########	Added color-color diagrams for cluster aging		###########	
+##########	Last updated: June 10, 2025				###########	
+##########	Update Description: Added PlotSED for best-fit model	###########
+##########		plotting for stellar photometric measurements	###########	
 ###################################################################################
 
 import re
@@ -10,6 +11,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as img
+from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.cbook import get_sample_data
 from scipy.interpolate import interp1d
@@ -48,9 +50,15 @@ wfc3_masses = [pd.read_csv("isoWFC3_1Msun.frame"), pd.read_csv("isoWFC3_3Msun.fr
 acs_masses = [pd.read_csv("isoACS_WFC_1Msun.frame"), pd.read_csv("isoACS_WFC_3Msun.frame"), pd.read_csv("isoACS_WFC_5Msun.frame"),
 	      pd.read_csv("isoACS_WFC_8Msun.frame"), pd.read_csv("isoACS_WFC_20Msun.frame")]
 
-# Calling in model for creating the cluster color-color diagrams
-BC03 = pd.read_csv("BC03_models_solar.txt")
+isoacs = pd.read_csv("isoACS_all.frame")
+isowfc3 = pd.read_csv("isoWFC3_all.frame")
+# isonircam = pd.read_csv("isoNIRCAM_all.frame") # not yet active
 
+# Calling in model for creating the cluster color-color diagrams
+# As of version 1.7.0, no longer using BC03 models. Instead use CB07 models (Bruzual 2007, arXiv:astro-ph/0703052)
+#BC03 = pd.read_csv("BC03_models_solar.txt")
+CB07_acs = pd.read_csv("CB07_models_acs_wfc.csv")
+CB07_wfc3 = pd.read_csv("CB07_models_wfc3_uvis.csv")
 cd(curr_dir)
 
 ###-----------------------------------------------------------------------------------------------------
@@ -82,7 +90,7 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 	label 		[str] (None):		The legend label to assign to the input points from sources. 
 	save 		[bool] (False): 	Sets whether to automatically same the CMD image. 
 	savefile 	[str] (None): 		The name to assigned the saved CMD image. 
-	title 		[str)] (None): 		Title of the figure, to be placed near, but not at, the top of the figure.
+	title 		[str] (None): 		Title of the figure.
 	subimg 		[str] (None): 		Filename of an image to include in the corner of the CMD. 
 						This is to allow a subplot of the XRB plotted to be shown within the CMD. 
 	annotation 	[str] (None): 		Additional annotation to add to the bottom corner of the CMD (usually XRB ID)
@@ -102,7 +110,7 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 	RETURNS: 
 	f, ax: 		Arguments defining the figure, which can be used to add more points to the CMD after the initial plotting.
  
-"""
+	"""
 
 	# Setting the style of my plots
 	#fontparams = {'font.family':'stix'}
@@ -256,7 +264,7 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 
 	if not annotation_size: annotation_size = titlesize
 
-	if title: ax.annotate(title, xy=(xlim[1]-0.35*abs(xlim[1]), ylim[1]+0.2*abs(ylim[1])), size=annotation_size)
+	if title: ax.set_title(title, fontsize=titlesize)
 
 	# If an annotation is given, add it to the bottom of the figure
 	if annotation: ax.annotate(annotation, xy=(xlim[1]-0.05*abs(xlim[1]), ylim[0]-0.1*abs(ylim[1])), size=annotation_size, horizontalalignment="right")
@@ -342,7 +350,7 @@ def AddCMD(df=None, xcolor=False, ycolor=False, color="black", size=10, marker=N
 
 ###-----------------------------------------------------------------------------------------------------
 
-def CorrectMags(frame=None, phots=None, corrections=None, field=None, apertures=[3,20], headers=["V", "B", "I"], instrument="ACS", filters=["F606W", "F435W", "F814W"], distance=False, savefile=None, ID_header="ID", coord_headers=["X", "Y"], extinction=[0,0,0,0]): 
+def CorrectMags(frame=None, phots=None, corrections=None, field=None, apertures=[3,20], headers=["V", "B", "I"], instrument="ACS", filters=["F606W", "F435W", "F814W"], distance=False, savefile=None, idheader="ID", ID_header=False, coordheads=["X", "Y"], coord_headers=False, extinction=[0,0,0,0]): 
 
 	"""Calculating magnitudes with given aperture corrections. The input 'instrument' can be 'ACS' or 'WFC3', which defines which EEF file to read from. Filters should be read in the order [V,B,I]. If given, 'extinction' should also be in [Av,Ab,Ai,Au] order. (NOTE: note RGB) or [V,B,I,U], if U is given. Corrections should also be read in VBI order. """
 
@@ -351,6 +359,10 @@ def CorrectMags(frame=None, phots=None, corrections=None, field=None, apertures=
 
 	if not distance: 
 		distance = float(input("Distance to galaxy (in units parsec): "))
+
+	# ID_headers and coord_headers are depricated as parameters, but still used as variables in the code below.
+	if coord_headers == False: coord_headers = coordheads
+	if ID_headers == False: ID_headers = idheader
 
 	# If U is given, add U corrections to all commands
 	if len(filters) == 4: U_true = True
@@ -443,11 +455,17 @@ def CorrectMags(frame=None, phots=None, corrections=None, field=None, apertures=
 
 ###-----------------------------------------------------------------------------------------------------
 
-def CorrectMag(df=False, phots=None, correction=None, field=None, apertures=[3,20], instrument="ACS", filt="F606W", distance=False, savefile=None, ID_header="ID", coord_headers=["X", "Y"], extinction=0): 
+def CorrectMag(df=False, phots=None, correction=None, field=None, apertures=[3,20], instrument="ACS", filt="F606W", distance=False, savefile=None, idheader="ID", ID_header=False, coordheads=["X", "Y"], coord_headers=False, extinction=0): 
 
-	"""Calculating magnitude with given aperture correction, like CorrectMags, but specifically for a single input filter (so that it doesn't require all filters to be given if only one measurement is needed). The input 'instrument' can be 'ACS' or 'WFC3', which defines which EEF file to read from. Filters should be read in the order [V,B,I]. If given, 'extinction' should also be in [Av,Ab,Ai,Au] order. (NOTE: note RGB) or [V,B,I,U], if U is given. Corrections should also be read in VBI order. """
+	"""Calculating magnitude with given aperture correction, like CorrectMags, but specifically for a single input filter (so that it doesn't require all filters to be given if only one measurement is needed). The input 'instrument' can be 'ACS' or 'WFC3', which defines which EEF file to read from. Filters should be read in the order [V,B,I]. If given, 'extinction' should also be in [Av,Ab,Ai,Au] order. (NOTE: note RGB) or [V,B,I,U], if U is given. Corrections should also be read in VBI order. 
+
+	NOTE: ID_header and coord_headers have been depricated. They are now called idheader and coordheads, to match other parts of XRBID. """
 
 	if df: frame = df.copy()
+
+	# ID_headers and coord_headers are depricated as parameters, but still used as variables in the code below.
+	if coord_headers == False: coord_headers = coordheads
+	if ID_headers == False: ID_headers = idheader
 
 	curr_dir = pwd()
 	# Loading in the EEFs file
@@ -504,11 +522,14 @@ def CorrectMag(df=False, phots=None, correction=None, field=None, apertures=[3,2
 
 ###-----------------------------------------------------------------------------------------------------
 
-def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"], colors=["V-I","B-V"], correct_ext=False, E_BV=0.08, color="black", size=15, title="", model_dir=file_dir): 
+def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"], colors=["V-I","B-V"], instrument="acs", correct_ext=False, E_BV=0.08, label_ages=True, color="black", label="", model_color="gray", model_label="", size=15, title="", xlim=(-3,3), ylim=(3,-3), Z=0.02, stellar_lib="BaSeL"): 
 
 	"""
 	Creates a color-color diagram for comparing the photometric properties of input sources 
 	to the cluster color evolutionary models of Bruzual & Charlot (2003), assuming solar metallicity.
+	The ACS/WFC models contain the filters F220W, F250W, F330W, F410W, F435W, F475W, F555W, F606W, 
+	F625W, F775W, F814W. The WFC3/UVIS models contain F225W, F336W,  F438W, F547M, F555W, F606W, 
+	F625W, F656N, F658N, and F814W. These are stored in the file CB07_models_*.csv.
 	
 	PARAMETERS: 
 	-----------
@@ -524,15 +545,26 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 					This will be used to determine which extinction factor would be 
 					applied to the x and y colors and the direction/magnitude of the
 					reddening arrow. 
+	instrument [str] ('acs'):	HST instrument (acs or wfc3) with which observations were taken. Default is 'acs'.
 	correct_ext [bool]	: 	Adjust the color of clusters to correct for extinction (reddening)
 					using the Milky Way extinction law and E_BV.
 	E_BV	[float]	(0.08)	:	Galactic reddening towards the galaxy or source of interest.
 					Used to adjust the extinction arrow vector.
+	label_ages [bool]	: 	If true, plots markers to indicate cluster ages of 10 Myr and 400 Myr. Defaults to True.
 	color	[str]	(black)	:	Color of the cluster markers. 
+	label	[str]		:	Legend label of the cluster points. 
+	model_color [str] (gray):	Color of the model line.
+	model_label [str]	:	Legend label of the model. 
 	size	[int]	(15)	:	Cluster marker size. 
 	title	[str]		: 	Title of the figure. 
-	model_dir [str]		:	Allows user to define the location of the B&C model.
-
+	xlim	[tuple] (-3,3) 	:	Limits on the x-axis of the figure. 
+	ylim 	[tuple] (3,-3) 	:	Limits on the y-axis of the figure.  
+	Z	[float]	(0.02)	:	Stellar metallicity to compare to models. Defaults to approximately solar (Z=0.02). 
+					Other options are: 0.0001, 0.0004, 0.004, 0.008, 0.05, 0.10.
+	stellar_lib [str]	:	The name of the stellar libary to use, available in CB07 (from https://www.bruzual.org/). 
+					Defaults to "BaSel" (Lastennet et al. 2001). Other options are "xmiless" 
+					(MILES, Falcón-Barroso et al. 2011) or "stelib" (Le Borgne et al. 2003). 
+	
 	RETURNS: 
 	----------- 
 
@@ -541,6 +573,11 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 	Returns plt figure.
 
 	"""
+
+	if instrument.lower() == "acs": model = CB07_acs.copy()
+	elif instrument.lower() == "wfc3": model = CB07_wfc3.copy()
+
+	model = Find(model, ["Z = " + str(Z), "Library = " + stellar_lib])
 
 	# Calculating reddening factors from the MW reddening law
 	Rv = 3.19  # from MW extinction law
@@ -584,43 +621,592 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 	plt.figure(figsize=(4.5,4.5))
 	plt.tick_params(direction="in", width=1.4, length=7)
 
-	# Plotting clusters from input dataframe
-	if isinstance(clusters, pd.DataFrame): 
-		clusters = clusters.copy()
-		plt.scatter(clusters[xcolor[0]] - clusters[xcolor[1]]+Ex_clust, 
-		    	    clusters[ycolor[0]] - clusters[ycolor[1]]+Ey_clust, 
-			    s=size, color=color)
 
 	# Pulling x and y colors from the model based on the input DataFrame
-	for head in BC03.columns.values.tolist(): 
-		if xcolor[0] in head: x0 = head
-		if xcolor[1] in head: x1 = head
-		if ycolor[0] in head: y0 = head
-		if ycolor[1] in head: y1 = head
-	
-	# Headers in BC03 are in V-<filter> format, so they must be subtracted backwards
-	xmodel = BC03[x1]-BC03[x0]
-	ymodel = BC03[y1]-BC03[y0]
+	# These should be colors, but this code allows user to input a magnitude, in case it's more useful for special cases
+	for head in model.columns.values.tolist(): 
+		if isinstance(xcolor, list):
+			if xcolor[0] in head: x0 = head
+			if xcolor[1] in head: x1 = head
+		if isinstance(xcolor, str): 
+			print("WARNING: Single magnitude detected for xcolor. It is advised to only use colors for these models!")
+			if xcolor in head: x0 = head
+		if isinstance(ycolor, list): 
+			if ycolor[0] in head: y0 = head
+			if ycolor[1] in head: y1 = head
+		if isinstance(ycolor, str): 
+			print("WARNING: Single magnitude detected for ycolor. It is advised to only use colors for these models!")
+			if ycolor in head: y0 = head
 
-	# Plotting the Solar model
-	plt.plot(xmodel, ymodel, color="black", label="Solar", alpha=0.7)
 
-	# Plotting the models for young and globular clusters
-	TempAge = Find(BC03, "log Age = 7") # 10 Myrs
-	plt.scatter(TempAge[x1]-TempAge[x0], TempAge[y1]-TempAge[y0], marker="v", color="black", s=75, zorder=5)
-	plt.annotate("10 Myrs", (TempAge[x1]-TempAge[x0] + 0.1, TempAge[y1]-TempAge[y0]))
+	# Headers in the models are in V-<filter> format, so they must be subtracted backwards
+	try: xmodel = model[x1]-model[x0]
+	except: xmodel = model["Vmag"] - model[x0]
+	try: ymodel = model[y1]-model[y0]
+	except: ymodel = model["Vmag"]-model[y0]
 
-	TempAge = Find(BC03, "log Age = 8.606543") # ~400 Myr
-	plt.scatter(TempAge[x1]-TempAge[x0], TempAge[y1]-TempAge[y0], marker="v", color="black", s=75, zorder=5)
-	plt.annotate("~400 Myrs", (TempAge[x1]-TempAge[x0]- 0.55, TempAge[y1]-TempAge[y0]+0.03))
+	# Plotting the cluster evolutionary model
+	plt.plot(xmodel, ymodel, color=model_color, label=model_label, alpha=0.5)
+
+	if label_ages:
+		# Plotting the models for young and globular clusters
+		TempAge = Find(model, "log-age-yr = 7") # 10 Myrs
+
+		if isinstance(xcolor, list): xage = TempAge[x1]-TempAge[x0]
+		else: TempAge[x0]
+		if isinstance(ycolor, list): yage = TempAge[y1]-TempAge[y0]
+		else: yage = TempAge[y0]
+
+		plt.scatter(xage,yage, marker="v", color=model_color, s=75, zorder=5)
+		plt.annotate("10 Myrs", (xage, yage), zorder=999)
+
+		TempAge = Find(model, "log-age-yr = 8.606543") # ~400 Myr
+
+		if isinstance(xcolor, list): xage = TempAge[x1]-TempAge[x0]
+		else: TempAge[x0]
+		if isinstance(ycolor, list): yage = TempAge[y1]-TempAge[y0]
+		else: yage = TempAge[y0]
+
+		plt.scatter(xage, yage, marker="v", color=model_color, s=75, zorder=5)
+		plt.annotate("400 Myrs", (xage, yage), zorder=999)
 
 	# Plotting the reddening arrow
 	print("Plotting reddening arrow for", colors[0], "vs.", colors[1])
-	plt.arrow(x=1,y=-0.25, dx=Ex, dy=Ey, head_width=.05, color="black")
+	plt.arrow(x=xlim[1]*0.75,y=ylim[1]*0.75, dx=Ex, dy=Ey, head_width=.05, color="black")
 
-	plt.xlim(-0.5,1.6)
-	plt.ylim(1.3,-.5)
-	plt.xlabel(xcolor[0] + " - " + xcolor[1],fontsize=20)
-	plt.ylabel(ycolor[0] + " - " + ycolor[1],fontsize=20)
+
+	# Plotting clusters from input dataframe
+	if isinstance(clusters, pd.DataFrame): 
+		clusters = clusters.copy()
+
+		if isinstance(xcolor, list): xvals = clusters[xcolor[0]] - clusters[xcolor[1]]+Ex_clust
+		else: xvales = clusters[xcolor] + Ex_clust
+
+		if isinstance(ycolor, list): yvals = clusters[ycolor[0]] - clusters[ycolor[1]]+Ey_clust
+		else: yvals = clusters[ycolor] + Ey_clust
+
+		plt.scatter(xvals, yvals, s=size, color=color, label=label)
+
+	plt.xlim(xlim)
+	plt.ylim(ylim)
+	if isinstance(xcolor, list): plt.xlabel(xcolor[0] + " - " + xcolor[1],fontsize=20)
+	else: plt.xlabel(xcolor,fontsize=20)
+	if isinstance(ycolor, list): plt.ylabel(ycolor[0] + " - " + ycolor[1],fontsize=20)
+	else:plt.ylabel(ycolor,fontsize=20)
+
 	plt.title(title)
 	return plt
+
+###-----------------------------------------------------------------------------------------------------
+
+def AddCCD(fig, clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"], colors=["V-I","B-V"], instrument="acs", correct_ext=False, E_BV=0.08, label_ages=True, color="black", label="", model_color="gray", model_label="", size=15, Z=0.02, stellar_lib="BaSeL"): 
+
+	"""
+	Adds a secondary color-color diagram to one already built with MakeCCD. User must read in the object returned by MakeCCD for this to plot properly.
+	
+	PARAMETERS: 
+	-----------
+	fig	[plt object]	:	plt returned from MakeCCD.
+	clusters [pd.DataFrame]	:	DataFrame containing the magnitude of each cluster in each filter
+					denoted by xcolor and ycolor. 
+	xcolor	[list]		:	List containing the filters used to calculate the x-axis colors.
+					By default, set to ["F555W","F814W"], which equates to a V-I 
+					color on the x-axis.
+	ycolor	[list]		:	List containing the filters used to calculate the y-axis colors.
+					By default, set to ["F435W","F555W"], which equates to a B-V 
+					color on the y-axis.
+	colors	[list]		: 	List containing the short-hand for the color in the x and y axes. 
+					This will be used to determine which extinction factor would be 
+					applied to the x and y colors and the direction/magnitude of the
+					reddening arrow. 
+	correct_ext [bool]	: 	Adjust the color of clusters to correct for extinction (reddening)
+					using the Milky Way extinction law and E_BV.
+	E_BV	[float]	(0.08)	:	Galactic reddening towards the galaxy or source of interest.
+					Used to adjust the extinction arrow vector.
+	label_ages [bool]	: 	If true, plots markers to indicate cluster ages of 10 Myr and 400 Myr. Defaults to True.
+	color	[str]	(black)	:	Color of the cluster markers. 
+	size	[int]	(15)	:	Cluster marker size. 
+	label	[str]		:	Legend label of the cluster points. 
+	model_color [str] (gray):	Color of the model line.
+	model_label [str]	:	Legend label of the model. 
+	instrument [str] ('acs'):	HST instrument (acs or wfc3) with which observations were taken. Default is 'acs'. 
+	Z	[float]	(0.02)	:	Stellar metallicity to compare to models. Defaults to approximately solar (Z=0.02). 
+					Other options are [0.0001, 0.0004, 0.004, 0.008, 0.05, 0.10].
+	stellar_lib [str]	:	The name of the stellar libary to use, available in CB07 (from https://www.bruzual.org/). 
+					Defaults to "BaSel" (Lastennet et al. 2001). Other options are "xmiless" (MILES, Falcón-Barroso et al. 2011)
+					or "stelib" (Le Borgne et al. 2003). 
+	
+	RETURNS: 
+	----------- 
+
+	Plots input clusters against the cluster color evolution models, including an arrow pointing in the direction of reddening. 
+
+	Returns plt figure.
+
+	"""
+
+	if instrument.lower() == "acs": model = CB07_acs.copy()
+	elif instrument.lower() == "wfc3": model = CB07_wfc3.copy()
+
+	model = Find(model, ["Z = " + str(Z), "Library = " + stellar_lib])
+
+	# Calculating reddening factors from the MW reddening law
+	Rv = 3.19  # from MW extinction law
+	Av = Rv * E_BV
+
+	# From other relations: 
+	Au = 1.586 * Av     # 5.06
+	Ab = (1 + Rv)*E_BV  # 4.19
+	Ai = 0.536 * Av     # 1.71
+
+	E_UB = Au - Ab
+	E_UV = Au - Av
+	E_UI = Au - Ai
+	E_VI = Av - Ai
+	E_BI = Ab - Ai
+	E_BV = Ab - Av
+
+	# Finding the appropriate reddening factor based on the input x and y colors
+	if colors[0] == "U-B": Ex = E_UB
+	elif colors[0] == "U-V": Ex = E_UV
+	elif colors[0] == "U-I": Ex = E_UI
+	elif colors[0] == "V-I": Ex = E_VI
+	elif colors[0] == "B-I": Ex = E_BI
+	elif colors[0] == "B-V": Ex = E_BV
+
+	if colors[1] == "U-B": Ey = E_UB
+	elif colors[1] == "U-V": Ey = E_UV
+	elif colors[1] == "U-I": Ey = E_UI
+	elif colors[1] == "V-I": Ey = E_VI
+	elif colors[1] == "B-I": Ey = E_BI
+	elif colors[1] == "B-V": Ey = E_BV
+
+	# If user wishes to apply extinction correction, set the extinction factor
+	if correct_ext: 
+		Ex_clust = Ex
+		Ey_clust = Ey
+	else: 
+		Ex_clust = 0
+		Ey_clust = 0
+
+
+	# Pulling x and y colors from the model based on the input DataFrame
+	# These should be colors, but this code allows user to input a magnitude, in case it's more useful for special cases
+	for head in model.columns.values.tolist(): 
+		if isinstance(xcolor, list):
+			if xcolor[0] in head: x0 = head
+			if xcolor[1] in head: x1 = head
+		if isinstance(xcolor, str): 
+			print("WARNING: Single magnitude detected for xcolor. It is advised to only use colors for these models!")
+			if xcolor in head: x0 = head
+		if isinstance(ycolor, list): 
+			if ycolor[0] in head: y0 = head
+			if ycolor[1] in head: y1 = head
+		if isinstance(ycolor, str): 
+			print("WARNING: Single magnitude detected for ycolor. It is advised to only use colors for these models!")
+			if ycolor in head: y0 = head
+
+	# Headers in the models are in V-<filter> format, so they must be subtracted backwards
+	try: xmodel = model[x1]-model[x0]
+	except: xmodel = model["Vmag"] - model[x0]
+	try: ymodel = model[y1]-model[y0]
+	except: ymodel = model["Vmag"]-model[y0]
+
+	# Plotting the Solar model
+	fig.plot(xmodel, ymodel, color=model_color, label=model_label, alpha=0.5)
+
+	if label_ages:
+		# Plotting the models for young and globular clusters
+		TempAge = Find(model, "log-age-yr = 7") # 10 Myrs
+
+		if isinstance(xcolor, list): xage = TempAge[x1]-TempAge[x0]
+		else: TempAge[x0]
+		if isinstance(ycolor, list): yage = TempAge[y1]-TempAge[y0]
+		else: yage = TempAge[y0]
+
+		plt.scatter(xage,yage, marker="v", color=model_color, s=75, zorder=5)
+		plt.annotate("10 Myrs", (xage, yage), zorder=999)
+
+		TempAge = Find(model, "log-age-yr = 8.606543") # ~400 Myr
+
+		if isinstance(xcolor, list): xage = TempAge[x1]-TempAge[x0]
+		else: TempAge[x0]
+		if isinstance(ycolor, list): yage = TempAge[y1]-TempAge[y0]
+		else: yage = TempAge[y0]
+
+		plt.scatter(xage, yage, marker="v", color=model_color, s=75, zorder=5)
+		plt.annotate("400 Myrs", (xage, yage), zorder=999)
+
+	# Plotting clusters from input dataframe
+	if isinstance(clusters, pd.DataFrame): 
+		clusters = clusters.copy()
+
+		if isinstance(xcolor, list): xvals = clusters[xcolor[0]] - clusters[xcolor[1]]+Ex_clust
+		else: xvales = clusters[xcolor] + Ex_clust
+
+		if isinstance(ycolor, list): yvals = clusters[ycolor[0]] - clusters[ycolor[1]]+Ey_clust
+		else: yvals = clusters[ycolor] + Ey_clust
+
+		fig.scatter(xvals, yvals, s=size, color=color, label=label)
+
+	return fig
+###-----------------------------------------------------------------------------------------------------
+
+def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype="reduced chi2", min_models=1, input_model=False, model_header_index=13): 
+
+	"""
+	Function for finding the best fit stellar SED from isochrone models. Reads in the photometric measurements from input source(s) across 
+	multiple filters and compares their values to those given by the Padova isochrones for theoretical stellar evolutionary models. 
+
+	PARAMETERS: 
+	-----------
+	df	[pd.DataFrame]	:	DataFrame containing the magnitudes and photometric errors of the source(s) of interest. 
+	instrument 	[str]	:	Instrument with which the measurements were taken. Currently accepts "acs" and "wfc3", but 
+					will be able to take "nircam" for JWST observations in the future. 
+	idheader	[str]	:	Header under which the source ID is stored. This will be used used to indicate which best-fit model is associated 
+					with which source when df contains more than one source to fit.
+	photheads	[list]	:	List of headers under which the photometric measurements per filter are stored within the 'df' DataFrame. 
+					The measured magnitudes should be stored under the name of the filter with which they were taken 
+					(e.g. "F814W", "F814Wmag", etc.), matching the headers of the isochrone models. If 'filterheads' is left blank, 
+					the code will use the filter headers found in the isochrone models as the photometry headers. In searching for 
+					the appropriate model headers, the code assumes the headers in the isochrone models begin with F and that no 
+					other header in the model table does. This is a reasonable assumption for both HST and JWST, but may need to be 
+					revisited for other models.
+	errorheads 	[list]	:	List of headers under which the photometric errors for each filter are stored (e.g. "F814W Err", "F555W Err"). 
+					If left blank, the code will assign values based on the values in 'photheads'.
+	fittype		[str]	:	Defines the algorithm use to determine the best-fit isochrone (currently not necessary, as only reduced chi2
+					has been coded. In the future MCMC will also be included). 
+					"reduced chi2" (default) selects the model for which the resulting reduced chi-squared is closest to 1. 
+					"mcmc" (pending) uses an MCMC algorithm to determine the best-fit model. 
+	min_models	[int]	:	Minimum number of models to save for each source. By default, only the best-fit model will be returned. 
+					If min_models >= 2, the next closest fit(s) up to min_models will be returned as well 
+					(e.g. if min_models = 3, the 2 next closest fits will also be given). If several models fit equally well,
+					all will be included in isoMatches.
+	input_model	[str]	:	If preferred, user can input the name of a file containing the preferred isochrone models from the 
+					Padova website. The code assumes the document is copied and pasted from the CMD output page, with the table
+					headers on the 14th line (unless the file is a CSV DataFrame); this can be modified using the 'model_header_index' 
+					parameter. One should be sure to change the magnitude headers to match those of their 'df', or vice versa. 
+	model_header_index [int]:	Index of the line containing the headers of the isochrone models, if a .txt file is read in as input_model. 
+					By default, this is line 13. This parameter can be ignored in input_model is the name of a CSV DataFrame.  
+
+	RETURNS: 
+	---------
+	isoMatches [pd.DataFrame] :	DataFrame containing the best-fit models for each source in 'df'. 
+	
+	"""
+
+	# If input_model is given, read in that file for the isochrone
+	# Otherwise, the instrument determines which isochrones to use
+	if input_model != False:
+		# Assumes first that the input is a CSV DataFrame. If not, the length of the header will = 1
+		isoTemp = pd.read_csv(input_model, comment="#")
+		if len(isoTemp.columns.tolist()) == 1: # the file was not a DataFrame, so treat as regular .txt file
+			# Pulls the header of the model file based on model_header_index
+			names = [n for n in open(input_model).readlines()[model_header_index].strip("# ").split()]
+			isoTemp = pd.read_csv(input_model, comment="#", delim_whitespace=True, names=names)
+		else: 
+			try: isoTemp = isoTemp.drop(columns=["Unnamed: 0"])
+			except: pass;
+	elif "acs" in instrument.lower(): isoTemp = isoacs.copy()
+	elif "wfc3" in instrument.lower(): isoTemp = isowfc3.copy()
+
+
+	# Tries to find the filter headers in isoTemp, assuming they all start with "F" and no other headers do. 
+	filters = [filt for filt in isoTemp.columns.tolist() if filt[0] == "F" and "ID" not in filt]
+	filters.sort()
+	
+	# Figure out the source headers to pull the photometry from df. If not given, assume they match the model header format
+	if photheads == False: photheads = [h for h in filters if h in df.columns.tolist()]
+	if errorheads == False: errorheads = [f"{h} Err" for h in photheads]
+
+
+	# Keeping track of the ID of each source we will model
+	sourceids = df[idheader].values.tolist()
+	
+	# Keeping track of the photometry of each source in each filter (and errors)
+	# Each row of this list represents a single source, and each column represents the magnitude for each
+	sourcemags = [[df[f][i] for f in photheads] for i in range(len(df))]
+	sourcemag_errs = [[df[e][i] for e in errorheads] for i in range(len(df))]
+
+	# Each best-fit model will be added to a separate DataFrame, which will be returned to the user at the end
+	isoMatches = BuildFrame(headers=isoTemp.columns.tolist())
+
+
+	# IN THE FUTURE, THIS PART WILL BE FLAGGED BY fittype
+	
+	# The fastest way to determine the best-fit model is to do so directly in the isoTemp DataFrame
+	# For each star, grab the photometry and compare to the isochrones. 
+	# Then find the isochrone for which the reduced chi-square is closest to 1, the best-fit
+	
+	isoMatches["Reduced Chi2"] = np.nan
+	isoMatches["Reduced Chi2 - 1"] = np.nan
+	isoMatches[idheader] = None
+
+	print("Finding best-fit model(s)...")
+	for star in range(len(df)): 
+		# As long as there is at least one good magnitude value associated with the star...
+		if False in [np.isnan(sourcemags[star][f]) for f in range(len(photheads))]:
+			# For each filter, find the difference of the (measurements - model)^2/(errors)^2 and take the sum
+			isoTemp["Reduced Chi2"] = np.nansum([(sourcemags[star][f]-isoTemp[photheads[f]].values)**2/sourcemag_errs[star][f]**2 if isinstance(sourcemags[star][f], float) else 0 for f in range(len(photheads))], axis=0)
+
+			# The best model is one such that reduced chi2 is close to 1. Values much higher than 1 are underfit, much lower than 1 is overfit. 
+			isoTemp["Reduced Chi2 - 1"] = np.abs(isoTemp["Reduced Chi2"] - 1)
+		
+			redchi2s = sorted(isoTemp["Reduced Chi2 - 1"].values.tolist()) # sorted list of reduced chi2 - 1
+			
+			# Searching for at least min_models number of best-fit models
+			temp = Find(isoTemp, f"Reduced Chi2 - 1 < {redchi2s[min_models]}")
+
+			# Adding the source ID to the DataFrame, to be added to isoMatches
+			temp[idheader] = sourceids[star]
+
+			# Adding the best-fit model(s) to the DataFrame to return to the user
+			isoMatches = pd.concat([isoMatches, temp], ignore_index=True)
+
+		else: pass; # if there are no good values, skip this star
+	print("DONE")
+
+	return isoMatches
+	
+###-----------------------------------------------------------------------------------------------------
+
+def PlotSED(df_sources, df_models, idheader, fitheader="Reduced Chi2 - 1", massheader="Mass", sourceheads=False, errorheads=False, modelheads=False, modelparams=["Mass", "logAge", "logL", "logTe", "Reduced Chi2 - 1"], showtable=True, showHR=False): 
+	"""
+	Takes in the photometric measurements of sources in a DataFrame and the best-fit isochrones DataFrame from FitSED and plots 
+	them together onto a chart. If more than one model is given for a single source ID (given as idheader), then the model with 
+	the smallest Reduced Chi2 - 1 (or whatever header is read in as fitheader) is marked as the best fit, and minimum and 
+	maximum estimated mass is indicated. 
+	
+	PARAMETERS: 
+	------------
+	df_sources 	[pd.DataFrame]	:	DataFrame containing the measured photometry of the sources 
+	df_models 	[pd.DataFrame]	:	DataFrame containing the best-fit SED models returned as isoMatches by FitSED.
+	idheader	[str]		:	Header containing the source ID in the df_model DataFrame. This is used to 
+						separate the SEDs into separate plots per source. 
+	fitheader	[str]		:	Header containing the value used as the criteria for finding the best fit
+						by FitSED. The default is "Reduced Chi2 - 1", as used in FitSED. 
+	massheader	[str]		:	Header containing the mass of each stellar model, in the event that there are multiple models
+						per source. The default is "Mass". 
+	sourceheads	[list]		:	Headers containing the measured magnitudes of each source per filter, in increasing 
+						wavelength order, in df_sources (e.g. F814W or F814Wmag). If left blank, PlotSED will 
+						search for headers that match those in df_models (or modelheads). 
+	errorheads	[list]		:	Headers containing the photometric errors of each sourcce. If none are given, assumes 
+						the headers are in the format '<modelheads> Err'.
+	modelheads	[list]		:	Headers containing the model magnitudes of the simulated star per filter, in increasing
+						wavelength order, in df_models. If left blank, PlotSED will automatically search 
+						the headers of df_models to find all possible wavelength headers (e.g. F814W or F814Wmag).
+	modelparams	[list]		:	List of parameters from the df_model to pull and display. These will be printed
+						as a table alongside the SED plot, sorted in order of best to worst fit. The defaults are 
+						["Mass", "logAge", "logL", "logTe", "Reduced Chi2 - 1"].
+	showtable	[bool]		:	If True, shows the table of model parameters given by 'modelparams', in order of best to worst fit.
+	showHR		[bool]		:	If True, plots the H-R diagram of the model star(s), indicating the most likely spectral type(s). 
+						(Feature coming soon!)
+
+	RETURNS: 
+	----------
+	Plots the best-fit models against the measured magnitudes of each source. 
+
+	"""
+
+	# Finding all unique sources from df_sources, to find their corresponding models in df_models 
+	sourceids = FindUnique(df_sources, header=idheader)[idheader].values.tolist()
+	
+	# Setting up all of the headers
+
+	# If no model headers are given, tries to find the photometry headers in df_models, assuming they all start with "F" and no other headers do. 
+	if modelheads == False: 
+		modelheads = [filt for filt in df_models.columns.tolist() if filt[0] == "F" and "ID" not in filt]
+		modelheads.sort()
+	
+	# Figure out the source headers to pull the photometry from df_sources. If not given, assume they match the modelheads format
+	if sourceheads == False: sourceheads = [h for h in modelheads if h in df_sources.columns.tolist()]
+	if errorheads == False: errorheads = [f"{h} Err" for h in sourceheads]
+
+	# Setting up wavelengths of sources and models, in angstroms
+	# JWST has filters containing W2, which mess up the function below. Replacing those with X
+	modelwavs = [int(re.sub('\D', '', h.replace('W2','W')))*10 for h in modelheads]
+	sourcewavs = [int(re.sub('\D', '', h.replace('W2','W')))*10 for h in sourceheads]
+
+	print(modelwavs)
+	print(sourcewavs)
+
+	# Plot each source separately
+	for s in sourceids: 
+		TempModel = Find(df_models, f"{idheader} = {s}")	# May contain multiple models, from min_models in FitSED
+		TempSource = Find(df_sources, f"{idheader} = {s}") 	# Should be a single source
+
+		# If there is no model for the given star, let user know
+		if len(TempModel) == 0: print(f"No best-fit model available for Source ID {s}.")
+
+		# Otherwise, plot the models
+		else: 
+			
+			# Pulls the magnitudes and wavelengths from the models
+			modelmags_all = [[TempModel[h][m] for h in modelheads] for m in range(len(TempModel))]
+			modelchis_all = TempModel[fitheader].values.tolist()
+			modelmass_all = TempModel[massheader].values.tolist()
+
+			# Also keep track of parameters the user wants to print from each model
+			# The table will be sorted from best to worst fit.
+			chisort = sorted(enumerate(modelchis_all), key=lambda i: i[1]) # Sorting the fit parameters
+			modelparams_all = [[round(TempModel[p][m[0]],8) for p in modelparams] for m in chisort]
+	
+			# Finding the index of the best fit, the minimum mass model, and the maximum mass model.
+			bestind = chisort[0][0]
+			minmassind = sorted(enumerate(modelmass_all), key=lambda i: i[1])[0][0]
+			maxmassind = sorted(enumerate(modelmass_all), key=lambda i: i[1])[-1][0]
+			
+			# Pulling the magnitudes and wavelengths from source DataFrame
+			sourcemags = [TempSource[h][0] for h in sourceheads] # list of photometries (mags)
+			errormags = [TempSource[h][0] for h in errorheads] # list of photometries (mags)
+
+			# Plotting the models
+			plt.figure(figsize=(4,4))
+
+			# On the left, plot the models and observations
+			#plt.subplot(1, 2, 1)
+			plt.xlabel("HST Filter (Angstrom)")
+			plt.ylabel("Absolute Magnitude")
+
+			# Plotting all models with low opacity
+			for mod in modelmags_all: 
+				plt.plot(modelwavs, mod, color="silver", alpha=0.3)
+
+			# Plotting the best-fit model
+			plt.plot(modelwavs, modelmags_all[bestind], lw=3, label="Best-Fit")
+			
+			# If there is more than one model, indicate the minimum and maximum mass
+			if len(TempModel) > 1: 
+				plt.plot(modelwavs, modelmags_all[minmassind], lw=3, color="pink", label="Min. Mass", linestyle=":")
+				plt.plot(modelwavs, modelmags_all[maxmassind], lw=2, color="lightblue", label="Max. Mass", linestyle="--")
+
+			# Plotting observed magnitudes and their errorbars
+			plt.scatter(sourcewavs, sourcemags, marker="s", edgecolor="black", facecolor="none", s=40, linestyle='None', label="Observed", zorder=999)
+			plt.errorbar(sourcewavs, sourcemags, yerr=[np.abs(m) for m in errormags], c="black", linestyle='None', zorder=999)
+
+			if showtable:
+				# On the right or bottom of plot, plot a table of model parameters
+				# Setting table position/size, where bbox = [xmin, ymin, width, height] of table
+				bbox = [1,1-max(0.2,0.1*len(TempModel)),1+(.25*len(modelparams)),max(0.2,0.1*len(TempModel))]
+
+				# Plotting table
+				the_table = plt.table(cellText=modelparams_all, colLabels=modelparams, bbox=bbox)
+				the_table.auto_set_font_size(False)
+				the_table.set_fontsize(10)
+			
+			plt.title(f"Source ID: {s}")
+			plt.legend()
+			plt.show()
+
+		if showHR: PlotHR(TempModel, figsize=(4,4))
+
+###-----------------------------------------------------------------------------------------------------
+
+def PlotHR(df=False, logTeheader="logTe", logLheader="logL", idheader=False, figsize=(5,5), colormap="RdYlBu_r"):
+ 
+	"""
+	Plots a rough estimate of the HR diagram with MS, giant, and supergiant regions denoted. 
+	The values for each region come from a mixture of HR diagram images, Wikipedia, and van Belle et al. 2021. 
+	Stars can be plotted on the diagram by reading in isoMatches (or a derivative thereof) from FitSED. 
+
+	PARAMETERS:
+	-----------
+	df	[pd.DataFrame; list]	:	DataFrame containing the log effective temperature and log luminosity of each star, 
+						or a list of [logTe, logL] for each star.
+						If none is given, a blank H-R diagram will be plotted instead
+	logTeheader	[str]		:	Header under which the log effective temperature is stored in 'df'. 
+						The default is logTe (matching isoMatches).
+	logLheader	[str]		:	Header under which the log stellar luminosity is stored in 'df'. 
+						The default is logL (matching isoMatches).
+	idheader	[str, list]	:	Header under which the source ID is stored in 'df', or a list of IDs if df is a list of values. 
+	figsize		[tuple]		: 	Size of the plot to print. Default is (5,5)
+	colormap	[str]		:	Matplotlib colormap used to differentiate between spectral types. Default is "RdYlBu_r".		
+
+	"""
+
+	# Estimated HR diagram regions (mins and maxes)
+	ms_teffs = [[4.48,6],[4.0,4.48],[3.88,4.0],[3.78,3.88],[3.72,3.78],[3.57,3.72],[3.38,3.57]]
+	ms_logls = [[4.48,6],[1.4,4.48],[0.7,1.4],[.18,.7],[-.22,.18],[-1.1,-.22],[-1.1,-3]]
+
+	g_teffs = [[np.nan,np.nan],[4.,4.08],[3.84,3.98],[3.75,3.83],[3.68,3.74],[3.59,3.68],[3.36,3.58]]
+	g_logls = [[np.nan,np.nan],[np.nan,np.nan],[1,2],[1,2],[1.5,2.2],[1.8,2.4],[2,2.3]]
+
+	sg_teffs = [[4.48,6],[4.0,4.48],[3.88,4.0],[3.78,3.88],[3.72,3.78],[3.57,3.72],[3.38,3.57]]
+	sg_logls = [[5,6],[5,6],[5,6],[5,6],[5,6],[5,6],[5,6]]
+
+	startypes=["O","B","A","F","G", "K","M"]
+
+	cmap = matplotlib.cm.get_cmap(colormap)
+	colors = [cmap(i) for i in np.linspace(0,1,7)]
+
+	fig = plt.figure(figsize=figsize)
+	ax = fig.add_subplot(111)
+
+	# Plotting the colormap
+	cax = ax.scatter(10,10,c=[6], cmap=colormap)
+	cbar = fig.colorbar(cax, pad=0)
+	cbar.ax.set_yticklabels(startypes)  # vertically oriented colorbar
+
+	# for each star type, plot the regions within which we see main sequence, giant, and supergiant stars
+	for i,star in enumerate(startypes):
+		try:
+			ms_patch =  Rectangle((ms_teffs[i][0], ms_logls[i][0]), ms_teffs[i][1]-ms_teffs[i][0], ms_logls[i][1]-ms_logls[i][0], color=colors[i], alpha=0.7, lw=0)
+			ax.add_patch(ms_patch)
+		except: pass;
+		try:
+			giant_patch =  Rectangle((g_teffs[i][0], g_logls[i][0]), g_teffs[i][1]-g_teffs[i][0], g_logls[i][1]-g_logls[i][0], edgecolor=colors[i], facecolor="none", hatch="\\\\", lw=2)
+			ax.add_patch(giant_patch)
+		except: pass;
+		try:
+			sg_patch =  Rectangle((sg_teffs[i][0], sg_logls[i][0]), sg_teffs[i][1]-sg_teffs[i][0], sg_logls[i][1]-sg_logls[i][0], edgecolor=colors[i], facecolor="none", hatch="||", lw=2)
+			ax.add_patch(sg_patch)
+		except: pass;
+
+	# Extra patches for labels
+	ms_patch =  Rectangle((10,10),1,1, color="black", alpha=0.5, lw=0, label="MS")
+	giant_patch =  Rectangle((10,10),1,1, edgecolor="black", facecolor="none", hatch="\\\\", lw=2, label="Giant")
+	sg_patch =  Rectangle((10,10), 1,1,edgecolor="black", facecolor="none", hatch="||", lw=2,  label="SG")
+	ax.add_patch(ms_patch)
+	ax.add_patch(giant_patch)
+	ax.add_patch(sg_patch)
+	plt.xlim(4.6,3.4)
+	plt.ylim(-2,6)
+	plt.xlabel(r"log T$_{eff}$ [K]", size=15)
+	plt.ylabel(r"log L [L$_{\odot}$]", size=15)
+	plt.legend()
+
+	# Plot the stars in df if given
+	
+	if isinstance(df, pd.DataFrame): 
+		plt.scatter(df[logTeheader].values.tolist(), df[logLheader].values.tolist(), marker=r"$\star$", color="black", s=150)
+		
+		# Changing the x and y limits to always include the stars
+		plt.xlim(max(4.6, max(df[logTeheader])+0.1), min(3.4, min(df[logTeheader])-0.1))
+		plt.ylim(min(-2, min(df[logLheader])-0.1), max(6, max(df[logLheader])+0.1))
+		
+		if isinstance(idheader, str): 
+			for i in range(len(df)): plt.text(df[logTeheader][i], df[logLheader][i]+0.3, df[idheader][i], fontsize=12)
+
+	if isinstance(df, list): 
+		if not isinstance(df[0], list): df = [df]
+		plt.scatter(np.array(df).T[0], np.array(df).T[1], marker=r"$\star$", color="black", s=150)
+
+		# Changing the x and y limits to always include the stars
+		plt.xlim(min(np.array(df).T[0])-0.3, max(np.array(df).T[0])+0.3)
+		plt.ylim(min(np.array(df).T[1])-0.5, max(np.array(df).T[1])+0.5)
+
+		if isinstance(idheader, list): 
+			for i in range(len(df)): plt.text(df[i][0], df[i][1]+0.3, idheader[i], fontsize=12)
+
+	plt.show()
+
+###-----------------------------------------------------------------------------------------------------
+	
+# PLANNED FUNCTIONS, UPDATE TBD
+#
+#def FitCCD(): 
+#	"""
+#	Function for finding the best fit cluster model from CB07 models. Coming soon!
+#	"""
+#
+

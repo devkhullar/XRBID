@@ -113,7 +113,7 @@ def AlignReg(filename, shifts=None, outfile=None, pixtodeg=None):
 
 ###-----------------------------------------------------------------------------------------------------
 
-def CorrectAstrometry(base_coords, cat_coords, autoresid=False, returnshifts=True, returncoords=False, savebasereg=False):
+def CorrectAstrometry(base_coords, cat_coords, autoresid=True, returnshifts=True, returncoords=False, savebasereg=False):
   """
   A quick method for identifying the likely sources necessary for an aperture alignment.
   This will cross-reference between the two input coordinates to find common sources, calculate the median offset between these sources,
@@ -128,7 +128,7 @@ def CorrectAstrometry(base_coords, cat_coords, autoresid=False, returnshifts=Tru
   autoresid	[bool]	: If True, automatically sets the limits of 'optimal' residuals from the calculated shift to +/- 0.02. 
 			  Otherwise, will prompt the user to select the best maximum and minimum residuals from a residual plot. 
 			  This allows the user to determine whether one or more selected base coordinate source should be excluded 
-			  from the astrometric correction for having residuals that are too far from the median. Default is False.
+			  from the astrometric correction for having residuals that are too far from the median. Default is True.
   returnshifts	[bool]	: If True, returns the x- and y-axis shifts from the astrometric correction. Default is True. 
   returncoords	[bool]	: If True, applies the astrometric corrections to the catalog coordinates and return the new coordinates as new_coords. 
   savebasereg 	[str]   : Saves a region file of the base coordinates of the matches sources from the base catalog

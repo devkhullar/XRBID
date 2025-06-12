@@ -247,7 +247,7 @@ def MakeXLF(L, L_lo=None, L_hi=None, L_header="LogL", completeness=36.2, gal=Non
 
 ###-----------------------------------------------------------------------------------------------------
 
-def AddXLF(L, L_lo=None, L_hi=None, L_header='LogL', label=None, bins=50, scale="log", cumul=True, color=None, lw=2, linestyle="-",savehist=None, legendsize=20, showlegend=True): 
+def AddXLF(L, L_lo=None, L_hi=None, L_header="LogL", label=None, bins=50, scale="log", cumul=True, color=None, lw=2, linestyle="-",savehist=None, legendsize=20, showlegend=True): 
 
 	"""
 	Adds in multiple XLFs to a single plot. Must do sequencially when called, or plot will automatically print after calling. 

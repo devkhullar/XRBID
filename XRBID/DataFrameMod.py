@@ -658,8 +658,8 @@ def HMS2deg(ra='', dec=''):
 
 	PARMETERS
 	---------
-	ra	  [str]  : RA in H:M:S format
-	dec	  [str]	 : Dec in D:M:S format with preceeding + or - 
+	ra	  [str]  : RA in H:M:S format, or with spaces instead of ':'
+	dec	  [str]	 : Dec in D:M:S format, or with spaces instead of ':', with preceeding + or - 
 	
 	RETURNS
 	--------
@@ -670,18 +670,19 @@ def HMS2deg(ra='', dec=''):
     RA, DEC, rs, ds = [],[], 1, 1
     if dec:
         for j in dec: 
-            print(j.split(":"))
-            D, M, S = [float(i) for i in j.split(":")]
+            if ":" in j: D, M, S = [float(i) for i in j.split(":")]
+            else: D, M, S = [float(i) for i in j.split(" ")]
             if str(D)[0] == '-': ds, D = -1, abs(D)
             deg = D + (M/60) + (S/3600)
-            DEC.append('{0}'.format(deg*ds))
+            DEC.append(deg*ds)
 
     if ra:
         for j in ra:
-            H, M, S = [float(i) for i in j.split(":")]
+            if ":" in j: H, M, S = [float(i) for i in j.split(":")]
+            else: H, M, S = [float(i) for i in j.split(" ")]
             if str(H)[0] == '-': rs, H = -1, abs(H)
             deg = (H*15) + (M/4) + (S/240)
-            RA.append('{0}'.format(deg*rs))
+            RA.append(deg*rs)
   
     if ra and dec:
         return (RA, DEC)

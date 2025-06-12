@@ -1,0 +1,59 @@
+Traceback (most recent call last):
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/jupyter_cache/executors/utils.py", line 58, in single_nb_execution
+    executenb(
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/nbclient/client.py", line 1314, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/Users/qianahunt/anaconda3/envs/jupyterbook/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+# For each X-ray source, number the associated stars starting from 1.
+tempcsc = DaoCleanMatch["CSC ID"][0] # Keeping track of the current X-ray source
+DaoCleanMatch["StarID"] = None # Storing the star number for each X-ray source
+
+starno = 1 # Star number counter
+
+for i in range(len(DaoCleanMatch)): 
+    # If this is a new CSC ID, save it to tempcsc and restart starno counter
+    if tempcsc != DaoCleanMatch["CSC ID"][i]: 
+        tempcsc = DaoCleanMatch["CSC ID"][i]
+        starno = 1
+    DaoCleanMatch["StarID"][i] = starno
+    starno += 1 # adds one to the starno counter
+
+# Saving the candidate region file with new numberings
+WriteReg(DaoCleanMatch, coordsys="image", coordnames=["X","Y"], 
+         idname="StarID", width=2, fontsize=12,
+         showlabel=True, outfile="../testdata/M101_XRB_candidates.reg")
+
+# DaoCleanMatch has now renumbered each star associated with 
+# an X-ray source for simplicity
+display(DaoCleanMatch)
+------------------
+
+
+[0;31m---------------------------------------------------------------------------[0m
+[0;31mTypeError[0m                                 Traceback (most recent call last)
+Cell [0;32mIn[6], line 16[0m
+[1;32m     13[0m     starno [38;5;241m+[39m[38;5;241m=[39m [38;5;241m1[39m [38;5;66;03m# adds one to the starno counter[39;00m
+[1;32m     15[0m [38;5;66;03m# Saving the candidate region file with new numberings[39;00m
+[0;32m---> 16[0m [43mWriteReg[49m[43m([49m[43mDaoCleanMatch[49m[43m,[49m[43m [49m[43mcoordsys[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43mimage[39;49m[38;5;124;43m"[39;49m[43m,[49m[43m [49m[43mcoordnames[49m[38;5;241;43m=[39;49m[43m[[49m[38;5;124;43m"[39;49m[38;5;124;43mX[39;49m[38;5;124;43m"[39;49m[43m,[49m[38;5;124;43m"[39;49m[38;5;124;43mY[39;49m[38;5;124;43m"[39;49m[43m][49m[43m,[49m[43m [49m
+[1;32m     17[0m [43m         [49m[43midname[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43mStarID[39;49m[38;5;124;43m"[39;49m[43m,[49m[43m [49m[43mwidth[49m[38;5;241;43m=[39;49m[38;5;241;43m2[39;49m[43m,[49m[43m [49m[43mfontsize[49m[38;5;241;43m=[39;49m[38;5;241;43m12[39;49m[43m,[49m
+[1;32m     18[0m [43m         [49m[43mshowlabel[49m[38;5;241;43m=[39;49m[38;5;28;43;01mTrue[39;49;00m[43m,[49m[43m [49m[43moutfile[49m[38;5;241;43m=[39;49m[38;5;124;43m"[39;49m[38;5;124;43m../testdata/M101_XRB_candidates.reg[39;49m[38;5;124;43m"[39;49m[43m)[49m
+[1;32m     20[0m [38;5;66;03m# DaoCleanMatch has now renumbered each star associated with [39;00m
+[1;32m     21[0m [38;5;66;03m# an X-ray source for simplicity[39;00m
+[1;32m     22[0m display(DaoCleanMatch)
+
+[0;31mTypeError[0m: WriteReg() got an unexpected keyword argument 'idname'
+

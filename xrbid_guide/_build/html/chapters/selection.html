@@ -393,6 +393,7 @@ document.write(`
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#isolating-candidate-counterparts-with-daoclean">Isolating Candidate Counterparts with <code class="docutils literal notranslate"><span class="pre">DaoClean</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-referencing-sources-across-filters">Cross-referencing sources across filters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-crossref-results">Checking <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> results</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#incorporating-other-catalogs">Incorporating Other Catalogs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-best-counterpart">Selecting the Best Counterpart</a></li>
 </ul>
@@ -1072,6 +1073,7 @@ document.write(`
 </table>
 <p>1271 rows × 6 columns</p>
 </div></div><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Saving ../testdata/M101_daoclean_f555w_acs_fk5.reg
+../testdata/M101_daoclean_f555w_acs_fk5.reg saved!
 </pre></div>
 </div>
 </div>
@@ -1080,7 +1082,7 @@ document.write(`
 </section>
 <section id="cross-referencing-sources-across-filters">
 <span id="sec-crossref"></span><h2>Cross-referencing sources across filters<a class="headerlink" href="#cross-referencing-sources-across-filters" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">DaoClean()</span></code> procedure above tells us which F555W source falls within 2-<span class="math notranslate nohighlight">\(\sigma\)</span> of an X-ray source. Next, we need to figure out what each of these F555W sources is called in the other filters, as identified by <code class="docutils literal notranslate"><span class="pre">RunPhots()</span></code> in {ref}(sec:runphots, in order to pull the appropriate photometries from each of the photometric data files. This can be done with <code class="docutils literal notranslate"><span class="pre">XRBID.Sources.Crossref()</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">DaoClean()</span></code> procedure above tells us which F555W source falls within 2-<span class="math notranslate nohighlight">\(\sigma\)</span> of an X-ray source. Next, we need to figure out what each of these F555W sources is called in the other filters, as identified by <code class="docutils literal notranslate"><span class="pre">RunPhots()</span></code> in {ref}(sec:runphots), in order to pull the appropriate photometries from each of the photometric data files. This can be done with <code class="docutils literal notranslate"><span class="pre">XRBID.Sources.Crossref()</span></code>.</p>
 <p>Unlike <code class="docutils literal notranslate"><span class="pre">DaoClean()</span></code>, <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> takes in a <code class="docutils literal notranslate"><span class="pre">DataFrame</span></code> containing at least the source ID and coordiates and cross-references them with sources within one or more given region file. The region files are read in as a list under the <code class="docutils literal notranslate"><span class="pre">regions</span></code> parameter. You can define the name of each catalog the region files represent with the <code class="docutils literal notranslate"><span class="pre">catalogs</span></code> parameter; this defines the headers under which <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> will save the cross-referencing results for each region file. (See <a class="reference internal" href="#sec-catalogs"><span class="std std-ref">Incorporating Other Catalogs</span></a> below for a more general look at using <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code>)</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1381,8 +1383,14 @@ document.write(`
 <p>1402 rows × 6 columns</p>
 </div></div></div>
 </div>
-<p>It’s a good idea check the results of <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> in <code class="docutils literal notranslate"><span class="pre">DS9</span></code> by plotting the region files over the full-color image of the galaxy. If there are some obvious bad matches, you can remove or change them manually in the <code class="docutils literal notranslate"><span class="pre">DataFrame</span></code> save file.</p>
-<p>Finally, it’s a good idea to renumber the candidate counterparts, so that you’re not relying on the long Dao IDs. This will make the imaging and donor identification steps we do later a little easier.</p>
+</section>
+<section id="checking-crossref-results">
+<h2>Checking <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> results<a class="headerlink" href="#checking-crossref-results" title="Link to this heading">#</a></h2>
+<p>It’s a good idea check the results of <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> in <code class="docutils literal notranslate"><span class="pre">DS9</span></code> by plotting the <code class="docutils literal notranslate"><span class="pre">daofind</span></code> region files for each filter over the full-color image of the galaxy. If there are some obvious bad matches, you can remove or change them manually in the <code class="docutils literal notranslate"><span class="pre">DataFrame</span></code> save file created above.</p>
+<p>One easy way to do so is to create a bash script that saves images of each CSC source with the region files plotted. You can then go through each image, compare the <code class="docutils literal notranslate"><span class="pre">daofind</span></code> source ID’s associated with each filter to that listed in your <code class="docutils literal notranslate"><span class="pre">*_daoclean_matches.frame</span></code> file, and adjust as needed. I opt to remove any spurious sources (e.g. false detections) from my <code class="docutils literal notranslate"><span class="pre">.frame</span></code> file, while I’m at it.</p>
+<p>The function to create the bash script is <code class="docutils literal notranslate"><span class="pre">XRBID.WriteScript.WriteDS9()</span></code>, which is described in {ref}(chap:sourceids). Once the script is created, you can open an <code class="docutils literal notranslate"><span class="pre">xterm</span></code> terminal with <code class="docutils literal notranslate"><span class="pre">xterm</span> <span class="pre">&amp;</span></code> in your command line, and then running <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">&lt;bashscriptname&gt;.sh</span></code>.</p>
+<p>I will not go through these steps here, but it’s a good idea to incorporate then in your own workflow.</p>
+<p>Once you’re happy with your matches, it’s a good idea to renumber the candidate counterparts, so that you’re not relying on the long Dao IDs. This will make the imaging and donor identification steps we do later a little easier.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># For each X-ray source, number the associated stars starting from 1.</span>
@@ -1411,151 +1419,22 @@ document.write(`
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Saving ../testdata/M101_XRB_candidates.reg
+<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
+<span class="ne">TypeError</span><span class="g g-Whitespace">                                 </span>Traceback (most recent call last)
+<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">line</span> <span class="mi">16</span>
+<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="n">starno</span> <span class="o">+=</span> <span class="mi">1</span> <span class="c1"># adds one to the starno counter</span>
+<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="c1"># Saving the candidate region file with new numberings</span>
+<span class="ne">---&gt; </span><span class="mi">16</span> <span class="n">WriteReg</span><span class="p">(</span><span class="n">DaoCleanMatch</span><span class="p">,</span> <span class="n">coordsys</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="n">coordnames</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">,</span><span class="s2">&quot;Y&quot;</span><span class="p">],</span> 
+<span class="g g-Whitespace">     </span><span class="mi">17</span>          <span class="n">idname</span><span class="o">=</span><span class="s2">&quot;StarID&quot;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span>          <span class="n">showlabel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">outfile</span><span class="o">=</span><span class="s2">&quot;../testdata/M101_XRB_candidates.reg&quot;</span><span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">20</span> <span class="c1"># DaoCleanMatch has now renumbered each star associated with </span>
+<span class="g g-Whitespace">     </span><span class="mi">21</span> <span class="c1"># an X-ray source for simplicity</span>
+<span class="g g-Whitespace">     </span><span class="mi">22</span> <span class="n">display</span><span class="p">(</span><span class="n">DaoCleanMatch</span><span class="p">)</span>
+
+<span class="ne">TypeError</span>: WriteReg() got an unexpected keyword argument &#39;idname&#39;
 </pre></div>
 </div>
-<div class="output text_html"><div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>X</th>
-      <th>Y</th>
-      <th>F555W ID</th>
-      <th>F435W ID</th>
-      <th>F814W ID</th>
-      <th>CSC ID</th>
-      <th>StarID</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>11331.067786</td>
-      <td>12533.111216</td>
-      <td>101364</td>
-      <td>143088</td>
-      <td>NaN</td>
-      <td>2CXO J140312.5+542056</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>11327.699419</td>
-      <td>12536.055626</td>
-      <td>101394</td>
-      <td>143125</td>
-      <td>148555</td>
-      <td>2CXO J140312.5+542056</td>
-      <td>2</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>11344.963322</td>
-      <td>12537.104504</td>
-      <td>101442</td>
-      <td>143189</td>
-      <td>148645</td>
-      <td>2CXO J140312.5+542056</td>
-      <td>3</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>11323.312878</td>
-      <td>12538.940418</td>
-      <td>101505</td>
-      <td>143293</td>
-      <td>NaN</td>
-      <td>2CXO J140312.5+542056</td>
-      <td>4</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>11332.293329</td>
-      <td>12541.942013</td>
-      <td>101528</td>
-      <td>143332</td>
-      <td>NaN</td>
-      <td>2CXO J140312.5+542056</td>
-      <td>5</td>
-    </tr>
-    <tr>
-      <th>...</th>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-    </tr>
-    <tr>
-      <th>1397</th>
-      <td>5443.850802</td>
-      <td>6942.044065</td>
-      <td>3143</td>
-      <td>4807</td>
-      <td>6523</td>
-      <td>2CXO J140346.1+541615</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>1398</th>
-      <td>3436.981758</td>
-      <td>10161.470633</td>
-      <td>52656</td>
-      <td>74953</td>
-      <td>71911</td>
-      <td>2CXO J140357.6+541856</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>1399</th>
-      <td>3445.711155</td>
-      <td>10162.184256</td>
-      <td>52713</td>
-      <td>74989</td>
-      <td>72017</td>
-      <td>2CXO J140357.6+541856</td>
-      <td>2</td>
-    </tr>
-    <tr>
-      <th>1400</th>
-      <td>6813.402988</td>
-      <td>4150.018831</td>
-      <td>68</td>
-      <td>105</td>
-      <td>100</td>
-      <td>2CXO J140338.3+541355</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>1401</th>
-      <td>4105.006500</td>
-      <td>4868.306051</td>
-      <td>307</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>2CXO J140353.7+541430</td>
-      <td>1</td>
-    </tr>
-  </tbody>
-</table>
-<p>1402 rows × 7 columns</p>
-</div></div></div>
+</div>
 </div>
 </section>
 <section id="incorporating-other-catalogs">
@@ -1663,6 +1542,7 @@ document.write(`
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#isolating-candidate-counterparts-with-daoclean">Isolating Candidate Counterparts with <code class="docutils literal notranslate"><span class="pre">DaoClean</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-referencing-sources-across-filters">Cross-referencing sources across filters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-crossref-results">Checking <code class="docutils literal notranslate"><span class="pre">Crossref()</span></code> results</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#incorporating-other-catalogs">Incorporating Other Catalogs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-best-counterpart">Selecting the Best Counterpart</a></li>
 </ul>

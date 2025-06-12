@@ -109,7 +109,9 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     aperture_correction [bool]  :	If true, runs the aperture correction for the field. Defaults as True.
     reg_correction 	[list]   :	Pixel correction on the [x,y] to add to the region file, if you find the region file 
 					created from photutils source extraction coordinates is misaligned with the HST 
-					image (Typically a correction of [1,1] pixel is sufficient.) 
+					image (Typically a correction of [1,1] pixel is sufficient.) This only applies the 
+					correction to the image coordinate region file, since fk5 tends to be more reliable 
+					without a coordinate correction.
     suffix 		[str]	:	Additional suffix to add to the end of filenames, if applicable. 
     			            	Good for if multiple fields are used for a single filter.
 
@@ -130,11 +132,13 @@ def RunPhots(hdu, gal, instrument, filter, fwhm_arcs, pixtoarcs=False, zeropoint
     [GALAXY]_daofind_[FILTER]_[INSTRUMENT][SUFFIX]_fk5.reg: 
     	Region file for all daofind sources in the field in fk5 coordinates.
     photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_full[SUFFIX].ecsv: 
-    	Datafile containing the full 1-30 pixel aperture photometry of all sources in the field
+    	Datafile containing the full 1-30 pixel aperture photometry of all sources in the field, 
+	not including an aperture correction. 
     photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_sources[SUFFIX].ecsv: 
-    	Datafile containing the 3 pixel aperture photometry of all sources in the field
+    	Datafile containing the 3 (or min_rad) pixel aperture photometry of all sources in the field, used for stars.
     photometry_[GALAXY]_[FILTER]_[INSTRUMENT]_extended[SUFFIX].ecsv: 
-    	Datafile containing the extended pixel aperture photometry of all sources in the field
+    	Datafile containing the extended pixel aperture photometry of all sources in the field, used for clusters.
+
     """
 
     try: data = hdu['SCI',1].data
