@@ -28,7 +28,7 @@ pd.options.mode.chained_assignment = None
 file_dir = os.path.dirname(os.path.abspath(__file__))
 curr_dir = pwd()
 
-from XRBID.DataFrameMod import Find, BuildFrame
+from XRBID.DataFrameMod import Find, BuildFrame, FindUnique
 from XRBID.Sources import LoadSources
 
 default_aps = [i for i in range(1,31)] #[0.5,1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,15.,20.]
@@ -1024,8 +1024,8 @@ def PlotSED(df_sources, df_models, idheader, fitheader="Reduced Chi2 - 1", massh
 
 	# Setting up wavelengths of sources and models, in angstroms
 	# JWST has filters containing W2, which mess up the function below. Replacing those with X
-	modelwavs = [int(re.sub('\D', '', h.replace('W2','W')))*10 for h in modelheads]
-	sourcewavs = [int(re.sub('\D', '', h.replace('W2','W')))*10 for h in sourceheads]
+	modelwavs = [int(re.sub('\D', '', h.replace('W2','W'))) for h in modelheads]
+	sourcewavs = [int(re.sub('\D', '', h.replace('W2','W'))) for h in sourceheads]
 
 	print(modelwavs)
 	print(sourcewavs)
@@ -1065,7 +1065,8 @@ def PlotSED(df_sources, df_models, idheader, fitheader="Reduced Chi2 - 1", massh
 
 			# On the left, plot the models and observations
 			#plt.subplot(1, 2, 1)
-			plt.xlabel("HST Filter (Angstrom)")
+			# NOTE: if reading in JWST data, the units should be in nanometers, not angstroms
+			plt.xlabel("HST Filter")
 			plt.ylabel("Absolute Magnitude")
 
 			# Plotting all models with low opacity
