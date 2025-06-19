@@ -50,6 +50,12 @@ wfc3_masses = [pd.read_csv("isoWFC3_1Msun.frame"), pd.read_csv("isoWFC3_3Msun.fr
 acs_masses = [pd.read_csv("isoACS_WFC_1Msun.frame"), pd.read_csv("isoACS_WFC_3Msun.frame"), pd.read_csv("isoACS_WFC_5Msun.frame"),
 	      pd.read_csv("isoACS_WFC_8Msun.frame"), pd.read_csv("isoACS_WFC_20Msun.frame")]
 
+nircam_masses = [pd.read_csv('isoNIRCAM_1Msun.frame'),
+                 pd.read_csv('isoNIRCAM_3Msun.frame'),
+                 pd.read_csv('isoNIRCAM_5Msun.frame'),
+                 pd.read_csv('isoNIRCAM_8Msun.frame'),
+                 pd.read_csv('isoNIRCAM_20Msun.frame')]
+
 isoacs = pd.read_csv("isoACS_all.frame")
 isowfc3 = pd.read_csv("isoWFC3_all.frame")
 # isonircam = pd.read_csv("isoNIRCAM_all.frame") # not yet active
@@ -141,7 +147,8 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 	#	mass20 = pd.read_csv("isoACS_WFC_20Msun.frame")
 
 	if instrument.upper() =="WFC3": masses = wfc3_masses # list of DataFrames of each mass model
-	else: masses = acs_masses
+	elif instrument.upper() == "ACS": masses = acs_masses 
+	else: masses = nircam_masses
 	mass_labels = [r"1 M$_\odot$", r"3 M$_\odot$", r"5 M$_\odot$", r"8 M$_\odot$", r"20 M$_\odot$"]
 
 	#cd(curr_dir) 
@@ -191,30 +198,39 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 	xlims = []
 	ylims = []
 	for m, mass in enumerate(masses): # for each of the mass models, pull the color/mag given by xmodel and ymodel
-		if isinstance(xmodel, list): 
-			xtemp = mass[xmodel[0]].values - mass[xmodel[1]].values
+		if isinstance(xmodel, list):
+			if instrument.upper() == 'NIRCAM':
+				xtemp = np.sort(np.array(mass[xmodel[0]].values - mass[xmodel[1]].values))
+			else:
+				xtemp = mass[xmodel[0]].values - mass[xmodel[1]].values
+			xtemp_left = max(xtemp)	# Keeping track of the leftmost x coordinate
 			xtemp_label = max(xtemp) + 0.1 + shift_labels[m][0] # default mass label position, unless set_labels is given
-			xtemp_left = max(xtemp)	# Keeping track of the leftmost x coordinate		
 			if not xlim: xlims.append([min(xtemp)-1, max(xtemp)+1])
 			invert_xlim = False
 		else: # if x-axis is a magnitude..
-			xtemp = mass[xmodel].values
+			if instrument.upper() == 'NIRCAM':
+				xtemp = np.sort(np.array(mass[xmodel].values))
+			else:
+				xtemp = mass[xmodel].values
 			xtemp_label = min(xtemp) - 0.1 + shift_labels[m][0]
-			xtemp_left = min(xtemp)
-			if not xlim: xlims.append([max(xtemp)+1, min(xtemp)-1])
+			xtemp_left = min(temp)
+			if not xlim: xlims.append([max(xtemp)+1], min(xtemp)-1)
 			invert_xlim = True
-		if isinstance(ymodel, list): 
+		if isinstance(ymodel, list):
 			ytemp = mass[ymodel[0]].values - mass[ymodel[1]].values
 			if not ylim: ylims.append([min(ytemp)-1, max(ytemp)+1])
-			invert_ylim = False
-		else: # of y-axis is a magnitude...
-			ytemp = mass[ymodel].values
+			invert_lim = False
+		else: # if y-axis is a magnitude...
+			if instrument.upper() == 'NIRCAM':
+				ytemp = np.sort(np.array(mass[ymodel].values))
+				ytemp = ytemp[::-1] # sort in descending order
+				invert_ylim = False
+				ytemp_label = ytemp[xtemp.tolist().index(xtemp_left)] + shift_labels[m][1]
+			else:
+				ytemp = mass[ymodel].values
+				invert_ylim = True
+				ytemp_label = ytemp[xtemp.tolist().index(xtemp_left)]
 			if not ylim: ylims.append([max(ytemp)+1, min(ytemp)-1])
-			invert_ylim = True
-
-		# Finding the best y-coordinate for the model label based on the leftmost
-		ytemp_label = ytemp[xtemp.tolist().index(xtemp_left)] + invert_ylim*0.5 + shift_labels[m][1]
-
 		# If set_labels is given, use this as the coordinate of the label
 		# (overrides the label positions set above)
 		if set_labels: 
@@ -247,8 +263,9 @@ def MakeCMD(sources=False, xcolor=None, ycolor=None, xmodel=None, ymodel=None, f
 		if invert_xlim: plt.xlim(max(xlims.T[0]), min(xlims.T[1]))
 		else: plt.xlim(min(xlims.T[0]), max(xlims.T[1]))
 	else: plt.xlim(xlim)
-	if not ylim: 
-		if invert_ylim: plt.ylim(max(ylims.T[0]), min(ylims.T[1]))
+	if not ylim:
+		if invert_ylim: plt.ylim(max(ylims.T[0]),min(ylims.T[1]))
+		elif instrument.upper() == 'NIRCAM': plt.ylim(ylims.max(), ylims.min())
 		else: plt.ylim(min(ylims.T[0]), max(ylims.T[1]))
 	else: plt.ylim(ylim)
 
