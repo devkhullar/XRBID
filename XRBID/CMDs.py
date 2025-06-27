@@ -674,7 +674,7 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 		else: yage = TempAge[y0]
 
 		plt.scatter(xage,yage, marker="v", color=model_color, s=75, zorder=5)
-		plt.annotate("10 Myrs", (xage, yage), zorder=999)
+		plt.annotate("10 Myrs", (xage, yage), zorder=900)
 
 		TempAge = Find(model, "log-age-yr = 8.606543") # ~400 Myr
 
@@ -684,7 +684,7 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 		else: yage = TempAge[y0]
 
 		plt.scatter(xage, yage, marker="v", color=model_color, s=75, zorder=5)
-		plt.annotate("400 Myrs", (xage, yage), zorder=999)
+		plt.annotate("400 Myrs", (xage, yage), zorder=900)
 
 	# Plotting the reddening arrow
 	print("Plotting reddening arrow for", colors[0], "vs.", colors[1])
@@ -701,7 +701,7 @@ def MakeCCD(clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F555W"]
 		if isinstance(ycolor, list): yvals = clusters[ycolor[0]] - clusters[ycolor[1]]+Ey_clust
 		else: yvals = clusters[ycolor] + Ey_clust
 
-		plt.scatter(xvals, yvals, s=size, color=color, label=label)
+		plt.scatter(xvals, yvals, s=size, color=color, label=label, zorder=999)
 
 	plt.xlim(xlim)
 	plt.ylim(ylim)
@@ -911,7 +911,7 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 					input_model. By default, this is line 13. This parameter can be ignored in input_model is the name 
 					of a CSV DataFrame.  
 	plotSED		[bool]	:	If True, shows the plot of the best-fit SED(s) using PlotSED, using default values.
-	showHR		[bool]	:	If True, shows the HR diagram from the best-fit SED(s).
+	showHR		[bool]	:	If True and plotSED = True, shows the HR diagram from the best-fit SED(s) via PlotSED.
 
 	RETURNS: 
 	---------
@@ -936,7 +936,8 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 
 
 	# Tries to find the filter headers in isoTemp, assuming they all start with "F" and no other headers do. 
-	filters = [filt for filt in isoTemp.columns.tolist() if filt[0] == "F" and "ID" not in filt]
+	# Quad filters from WFC3 (e.g. FQ422M) are also removed.
+	filters = [filt for filt in isoTemp.columns.tolist() if filt[0] == "F" and "ID" not in filt and "FQ" not in filt]
 	filters.sort()
 	
 	# Figure out the source headers to pull the photometry from df. If not given, assume they match the model header format
@@ -961,8 +962,7 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 		fitheader = "Reduced Chi2 - 1"
 	else: print("Invalid model given as fittype. Returning empty DataFrame.")
 
-	if plotSED: PlotSED(df_sources=df, df_models=isoMatches, idheader=idheader, instrument=instrument, fitheader=fitheader)
-	if showHR: PlotHR(Find(isoMatches, f"{fitheader} = {np.nanmin(isoMatches[fitheader])}"), figsize=(4,4))
+	if plotSED: PlotSED(df_sources=df, df_models=isoMatches, idheader=idheader, instrument=instrument, fitheader=fitheader, showHR=showHR)
 
 	return isoMatches
 	
@@ -1019,9 +1019,10 @@ def PlotSED(df_sources, df_models, idheader, instrument=False, fitheader="Chi2",
 
 	# If no model headers are given, tries to find the photometry headers in df_models, assuming they all start with "F" and no other headers do. 
 	if modelheads == False: 
-		modelheads = [filt for filt in df_models.columns.tolist() if filt[0] == "F" and "ID" not in filt]
+		modelheads = [filt for filt in df_models.columns.tolist() if filt[0] == "F" and "ID" not in filt and "FQ" not in filt]
 		modelheads.sort()
-	
+	#print(modelheads) 
+
 	# Figure out the source headers to pull the photometry from df_sources. If not given, assume they match the modelheads format
 	if sourceheads == False: sourceheads = [h for h in modelheads if h in df_sources.columns.tolist()]
 	if errorheads == False: errorheads = [f"{h} Err" for h in sourceheads]
