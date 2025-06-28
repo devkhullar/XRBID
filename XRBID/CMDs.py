@@ -868,7 +868,7 @@ def AddCCD(fig, clusters=False, xcolor=["F555W", "F814W"], ycolor=["F435W", "F55
 	return fig
 ###-----------------------------------------------------------------------------------------------------
 
-def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype="chi2", min_models=1, input_model=False, model_header_index=13, plotSED=True, showHR=False): 
+def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype="wls", min_models=1, input_model=False, model_header_index=13, plotSED=True, showHR=False, model_ext=False): 
 
 	"""
 	Function for finding the best fit stellar SED from isochrone models. Reads in the photometric measurements from input source(s) across 
@@ -891,12 +891,9 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 	errorheads 	[list]	:	List of headers under which the photometric errors for each filter are stored (e.g. "F814W Err", 
 					"F555W Err"). If left blank, the code will assign values based on the values in 'photheads'.
 	fittype		[str]	:	Defines the algorithm use to determine the best-fit isochrone. 
-					"chi2" (default), "min chi2", or "minimized chi2" selects the model which minimizes chi-squared, 
-					weighted by errors. Values are saved to isoMatches under the header "Chi2", which should be read 
-					in as fitheader when running PlotSED. 
-					"reduced chi2" selects the model for which the resulting reduced chi-squared is closest to 1. 
-					Values are saved to isoMatches under the header "Reduced Chi2 - 1", which should be read in as 
-					fitheader when running PlotSED.
+					"wls" (default) or "weighted least squares" selects the model which minimizes the sum of the 
+					residuals weighted by errors. Values are saved to isoMatches under the header "Test Statistic", 
+					which should be read in as fitheader when running PlotSED. 
 					"mcmc" (pending) will use an MCMC algorithm to determine the best-fit model, once released. 
 	min_models	[int]	:	Minimum number of models to save for each source. By default, only the best-fit model will be 
 					returned. If min_models >= 2, the next closest fit(s) up to min_models will be returned as well 
@@ -912,6 +909,13 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 					of a CSV DataFrame.  
 	plotSED		[bool]	:	If True, shows the plot of the best-fit SED(s) using PlotSED, using default values.
 	showHR		[bool]	:	If True and plotSED = True, shows the HR diagram from the best-fit SED(s) via PlotSED.
+	model_ext [bool, list]	:	Determines whether to add dust extinction as a free parameter in the model fitting. 
+					Default is False, meaning no intrinsic dust extinction is assumed. If True, creates additional isochrone
+					models with an applied extinction between 0.0 and 2.0 (see XRBID.CMDs.AddExtinction). 
+					May also call model_ext as a list to define the maximum modeled Av, the number of Av values between 
+					0.0 and Av_max to model, the wavelength conversion factor to convert from the instrument wavelengths 
+					to nanometers (HST), and the index defining the dust extinction profile; 
+					e.g. model_ext=[<Av_max>, <Av_num>, <wav2nm>, <beta>]  
 
 	RETURNS: 
 	---------
@@ -953,13 +957,14 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 	sourcemags = [[df[f][i] for f in photheads] for i in range(len(df))]
 	sourcemag_errs = [[df[e][i] for e in errorheads] for i in range(len(df))]
 
+	# If user wishes to model dust extinction by setting model_ext=True or model_ext as list: 
+	if isinstance(model_ext, list): isoTemp = AddExtinction(isoTemp, Av_max=model_ext[0], Av_num=model_ext[1], wav2nm=model_ext[2], beta=model_ext[3])
+	elif model_ext == True: isoTemp = AddExtinction(isoTemp)
+	else: pass;
 
-	if fittype.lower() == "chi2" or ("min" in fittype.lower() and "chi2" in fittype.lower()): 
-		isoMatches = Chi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models)
-		fitheader = "Chi2"
-	elif "red" in fittype.lower() and "chi2" in fittype.lower(): 
-		isoMatches = ReducedChi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models)
-		fitheader = "Reduced Chi2 - 1"
+	if fittype.lower() == "wls" or ("weight" in fittype.lower() and "square" in fittype.lower()): 
+		isoMatches = WLS(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models)
+		fitheader = "Test Statistic"
 	else: print("Invalid model given as fittype. Returning empty DataFrame.")
 
 	if plotSED: PlotSED(df_sources=df, df_models=isoMatches, idheader=idheader, instrument=instrument, fitheader=fitheader, showHR=showHR)
@@ -968,11 +973,11 @@ def FitSED(df, instrument, idheader, photheads=False, errorheads=False, fittype=
 	
 ###-----------------------------------------------------------------------------------------------------
 
-def PlotSED(df_sources, df_models, idheader, instrument=False, fitheader="Chi2", massheader="Mass", sourceheads=False, errorheads=False, modelheads=False, modelparams=False, showtable=True, showHR=False): 
+def PlotSED(df_sources, df_models, idheader, instrument=False, fitheader="Test Statistic", massheader="Mass", sourceheads=False, errorheads=False, modelheads=False, modelparams=False, showtable=True, showHR=False): 
 	"""
 	Takes in the photometric measurements of sources in a DataFrame and the best-fit isochrones DataFrame from FitSED and plots 
 	them together onto a chart. If more than one model is given for a single source ID (given as idheader), then the model with 
-	the smallest Reduced Chi2 - 1 (or whatever header is read in as fitheader) is marked as the best fit, and minimum and 
+	the smallest test statistic (given within whatever header is read in as fitheader) is marked as the best fit, and minimum and 
 	maximum estimated mass is indicated. 
 	
 	PARAMETERS: 
@@ -985,7 +990,8 @@ def PlotSED(df_sources, df_models, idheader, instrument=False, fitheader="Chi2",
 						to label the x-axis of the plot as "<instrument> Filter". Otherwise, the default axis label 
 						will be "Instrument Filter".
 	fitheader	[str]		:	Header containing the value used as the criteria for finding the best fit
-						by FitSED. The default is "Reduced Chi2 - 1", as used in FitSED. 
+						by FitSED. The default is "Test Statistic", as used in FitSED. This code assumes the 
+						best fit is determined by minimizing the test statistic from FitSED.
 	massheader	[str]		:	Header containing the mass of each stellar model, in the event that there are multiple models
 						per source. The default is "Mass". 
 	sourceheads	[list]		:	Headers containing the measured magnitudes of each source per filter, in increasing 
@@ -1013,7 +1019,9 @@ def PlotSED(df_sources, df_models, idheader, instrument=False, fitheader="Chi2",
 	# Finding all unique sources from df_sources, to find their corresponding models in df_models 
 	sourceids = FindUnique(df_sources, header=idheader)[idheader].values.tolist()
 	
-	if modelparams == False: modelparams = ["Mass", "logAge", "logL", "logTe", fitheader]
+	if modelparams == False: 
+		if "Av" in df_models.columns.tolist(): modelparams = ["Mass", "Av", "logAge", "logL", "logTe", fitheader]
+		else: modelparams = ["Mass", "logAge", "logL", "logTe", fitheader]
 
 	# Setting up all of the headers
 
@@ -1211,18 +1219,20 @@ def PlotHR(df=False, logTeheader="logTe", logLheader="logL", idheader=False, fig
 
 ###-----------------------------------------------------------------------------------------------------
 
-def Chi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models): 
+def WLS(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models): 
 	"""
-	Function for calculating Chi2, called by fitSED if fittype = 'Chi2' or 'Min Chi2'. 
-	For each star in df, checks that there are at least 1 good measurement, and then calculates the Chi2 (weighted by errors), 
-	which should be minimized to find the best fit. This method is better than Reduced Chi2 when the errors are large. 
+	Function for calculating the weighted least squares statistic, called by fitSED. 
+	For each star in df, checks that there are at least 1 good measurement, and then calculates the residuals 
+	between the measurements and the corresponding values in the isochrone models, weighted by the errors.  
+	The best-fit model is that which minimizes the resulting Test Statistic.
 
-	Returned isoMatches will contain the header 'Chi2', which should be used as the fitheader when calling PlotSED.  
+	Returned isoMatches will contain the header 'Test Statistic', which should be used as the fitheader when calling PlotSED.  
 	"""
+
 	# Each best-fit model will be added to a separate DataFrame, which will be returned to the user at the end
 	isoMatches = BuildFrame(headers=isoTemp.columns.tolist())
 
-	isoMatches["Chi2"] = np.nan
+	isoMatches["Test Statistic"] = np.nan
 	isoMatches[idheader] = None
 	
 	print("Finding best-fit model(s)...")
@@ -1230,13 +1240,13 @@ def Chi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids
 		# As long as there is at least one good magnitude value associated with the star...
 		if False in [np.isnan(sourcemags[star][f]) for f in range(len(photheads))]:
 			# For each filter, find the difference of the (measurements - model)^2/(errors)^2 and take the sum
-			isoTemp["Chi2"] = np.nansum([(sourcemags[star][f]-isoTemp[photheads[f]].values)**2/sourcemag_errs[star][f]**2 if isinstance(sourcemags[star][f], float) else 0 for f in range(len(photheads))], axis=0)
+			isoTemp["Test Statistic"] = np.nansum([(sourcemags[star][f]-isoTemp[photheads[f]].values)**2/sourcemag_errs[star][f]**2 if isinstance(sourcemags[star][f], float) else 0 for f in range(len(photheads))], axis=0)
 
-			minchi2s = sorted(isoTemp["Chi2"].values.tolist()) # sorted list of reduced chi2 - 1
+			minstats = sorted(isoTemp["Test Statistic"].values.tolist()) # sorted list of test statistics
 			
 			# Searching for at least min_models number of best-fit models
-			temp = Find(isoTemp, f"Chi2 < {minchi2s[min_models]}")
-			if len(temp) == 0: temp = Find(isoTemp, f"Chi2 <= {minchi2s[min_models]}")
+			temp = Find(isoTemp, f"Test Statistic < {minstats[min_models]}")
+			if len(temp) == 0: temp = Find(isoTemp, f"Test Statistic <= {minstats[min_models]}")
                 
 			# Adding the source ID to the DataFrame, to be added to isoMatches
 			temp[idheader] = sourceids[star]
@@ -1250,56 +1260,60 @@ def Chi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids
 	return isoMatches
 
 ###-----------------------------------------------------------------------------------------------------
-
-def ReducedChi2(df, isoTemp, photheads, sourcemags, sourcemag_errs, idheader, sourceids, min_models):
+	
+def AddExtinction(df, Av_max=2.0, Av_num=20, wav2nm=1, beta=-0.7): 
 	"""
-	Function for calculating Reduced Chi2, called by fitSED if fittype = 'Reduced Chi2' (or equivalent). 
-	For each star in df, checks that there are at least 2 good measurements, and then calculates 'Reduced Chi2 - 1', 
-	which should be minimized to find the best fit. This method is only good when errors are low. It's recommended to
-	minimize Chi2 instead. 
+	If an isochrone file does not include extinction as a free parameter (Av), the DataFrame read in as df
+	will be modified such that each model has an Av between 0 and 2 applied to its photometry using the 
+	extinction equation: Mag_ext = Mag + Av*(wavelength/550 nm)**(-0.7). 
 
-	Returned isoMatches will contain the header 'Reduce Chi2 - 1', which should be used as the fitheader when calling 
-	PlotSED.  
+	These new isochrone models can then be used to estimate reddening on stars by finding the best-fit 
+	model between photometric measurements and the extinction-applied models.
+	
+	PARAMETERS: 
+	----------
+	df 	[pd.DataFrame]	:	DataFrame containing the isochrone models. 
+	Av_max	[float]		:	Maximum Av value to model. The default is 2.0, a physically reasonable max.
+	Av_num	[int]		:	Number of Av values to model between 0.0 and Av_max.
+	wav2nm	[int] (1)	:	Conversion factor for converting the wavelengths of the filters into
+					nanometers (default wavelength unit of HST). E.g. the conversion of 
+					JWST NIRCAM to HST wavelengths is 10, or JWST MIRI to HST = 1.
+	beta	[float]	(-0.7)	:	Index of the dust extinction function. Default is -0.7, such that
+					M_ext = M + Av*(wavelength/550 nm)**(-0.7)
+
+	RETURNS: 
+	---------
+	
+	df_ext	[pd.DataFrame]	:	DataFrame containing the original isochrones models and additional
+					models for which extinction was added. 
 	"""
 
-	# Each best-fit model will be added to a separate DataFrame, which will be returned to the user at the end
-	isoMatches = BuildFrame(headers=isoTemp.columns.tolist())
-	isoMatches["Reduced Chi2"] = np.nan
-	isoMatches["Reduced Chi2 - 1"] = np.nan
-	isoMatches[idheader] = None
+	# Tries to find the filter headers in isoTemp, assuming they all start with "F" and no other headers do. 
+	# Quad filters from WFC3 (e.g. FQ422M) are also removed.
+	filters = [filt for filt in df.columns.tolist() if filt[0] == "F" and "ID" not in filt and "FQ" not in filt]
+	filters.sort()
 
-	print("Finding best-fit model(s)...")
-	for star in range(len(df)): 
-		# As long as there is at least 2 good magnitude values associated with the star...
-		if len(photheads) - np.sum([np.isnan(sourcemags[star][f]) for f in range(len(photheads))]) > 1:
-			# Number of good measurements, for reducing Chi2
-			nphots = np.nansum([1 if isinstance(sourcemags[star][f], float) else 0 for f in range(len(photheads))])
+	# Calculating the wavelengths in nanometers
+	wavelengths = [int(re.sub('\D', '', h.replace('W2','W')))*wav2nm for h in filters]
 
-			# For each filter, find the difference of the (measurements - model)^2/(errors)^2 and take the sum
-			isoTemp["Reduced Chi2"] = (1/(nphots - 1)) * np.nansum([(sourcemags[star][f]-isoTemp[photheads[f]].values)**2/sourcemag_errs[star][f]**2 if isinstance(sourcemags[star][f], float) else 0 for f in range(len(photheads))], axis=0)
+	Avs = np.linspace(0.0,Av_max,Av_num)
+	
+	df_ext = df.copy()
+	df_ext["Av"] = 0
+	
+	# For each possible extinction parameter, modify the measured magnitudes of each filter according to	
+	# the extinction model. Add these new measurements to the full DataFrame df_ext.
+	for Av in Avs: 
+		df_temp = df.copy()
+		for i,filt in enumerate(filters): 
+			df_temp[filt] = df_temp[filt] + Av*(wavelengths[i]/550)**(beta)
+		df_temp["Av"] = Av
+		df_ext = pd.concat([df_ext, df_temp], ignore_index=True)
 
-			# The best model is one such that reduced chi2 is close to 1. Values much higher than 1 are underfit, much lower than 1 is overfit. 
-			isoTemp["Reduced Chi2 - 1"] = np.abs(isoTemp["Reduced Chi2"] - 1)
-		
-			redchi2s = sorted(isoTemp["Reduced Chi2 - 1"].values.tolist()) # sorted list of reduced chi2 - 1
-			
-			# Searching for at least min_models number of best-fit models
-			temp = Find(isoTemp, f"Reduced Chi2 - 1 < {redchi2s[min_models]}")
-			if len(temp) == 0: temp = Find(isoTemp, f"Reduced Chi2 - 1 <= {redchi2s[min_models]}")
-
-			# Adding the source ID to the DataFrame, to be added to isoMatches
-			temp[idheader] = sourceids[star]
-
-			# Adding the best-fit model(s) to the DataFrame to return to the user
-			isoMatches = pd.concat([isoMatches, temp], ignore_index=True)
-
-		else: pass; # if there are no good values, skip this star
-	print("DONE")
-
-	return isoMatches
+	return df_ext
 
 ###-----------------------------------------------------------------------------------------------------
-	
+
 # PLANNED FUNCTIONS, UPDATE TBD
 #
 #def FitCCD(): 
